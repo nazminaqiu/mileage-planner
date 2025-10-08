@@ -958,7 +958,7 @@
             return days;
         }
 
-        // MODIFIED: Allocation function tweaked for the >100km rule
+        // MODIFIED: New two-phase allocation logic
         async function autoAllocate() {
             if (sites.length === 0) return alert('Please add at least one site.');
             if (!config.dateRange.start) return alert('Please select a date range.');
@@ -969,68 +969,65 @@
             if (days.length === 0) return alert('No available days in range.');
             
             sites.forEach(site => site.allocation = []);
-            const sortedSites = [...sites].sort((a, b) => b.distance - a.distance);
             let currentAmount = 0;
-            let dayIndex = 0;
             const maxTripsPerDay = 3;
-            const safetyLimit = days.length * sortedSites.length * 2; 
 
-            while (currentAmount < target && dayIndex < safetyLimit) {
-                // Find a site to allocate
-                for (const site of sortedSites) {
+            // Separate sites into long and short trip categories
+            const longTripSites = sites.filter(s => s.distance > 100).sort((a, b) => b.distance - a.distance);
+            const shortTripSites = sites.filter(s => s.distance <= 100).sort((a, b) => b.distance - a.distance);
+
+            // Keep track of how many trips are on each day
+            const dayUsage = new Map();
+            days.forEach(day => dayUsage.set(day.getTime(), 0));
+
+            // --- PHASE 1: Allocate all possible short trips first ---
+            let shortTripIndex = 0;
+            while (currentAmount < target && shortTripIndex < days.length * shortTripSites.length * maxTripsPerDay) {
+                let tripAdded = false;
+                for (const site of shortTripSites) {
                     if (currentAmount >= target) break;
 
                     const hasExistingTrip = site.allocation.some(a => a.trips > 0);
                     if (site.isSingleTrip && hasExistingTrip) continue;
 
-                    let day, dayTimestamp;
-                    let validDayFound = false;
-                    let potentialDayIndex = dayIndex;
-
-                    // Find the next valid day for the current site
-                    while (!validDayFound && potentialDayIndex < safetyLimit) {
-                        day = days[potentialDayIndex % days.length];
-                        dayTimestamp = day.getTime();
-                        
-                        const dayHasLongTrip = sites.some(s => s.distance > 100 && s.allocation.some(a => a.date.getTime() === dayTimestamp));
-                        const dayHasAnyTrip = sites.some(s => s.allocation.some(a => a.date.getTime() === dayTimestamp));
-                        const isThisSiteLong = site.distance > 100;
-                        
-                        if (dayHasLongTrip) {
-                            potentialDayIndex++;
-                            continue;
-                        }
-                        if (isThisSiteLong && dayHasAnyTrip) {
-                            potentialDayIndex++;
-                            continue;
-                        }
-                        validDayFound = true;
-                    }
-
-                    if (!validDayFound) {
-                        dayIndex = safetyLimit; 
-                        break; 
-                    }
-
-                    let dayAlloc = site.allocation.find(a => a.date.getTime() === dayTimestamp);
-                    if (!dayAlloc) {
-                        dayAlloc = { date: day, trips: 0 };
-                        site.allocation.push(dayAlloc);
-                    }
+                    const day = days[shortTripIndex % days.length];
+                    const dayTimestamp = day.getTime();
                     
-                    const maxAllowedTrips = site.distance > 100 ? 1 : maxTripsPerDay;
-
-                    if (dayAlloc.trips < maxAllowedTrips) {
+                    if (dayUsage.get(dayTimestamp) < maxTripsPerDay) {
+                        let dayAlloc = site.allocation.find(a => a.date.getTime() === dayTimestamp);
+                        if (!dayAlloc) {
+                            dayAlloc = { date: day, trips: 0 };
+                            site.allocation.push(dayAlloc);
+                        }
                         dayAlloc.trips++;
+                        dayUsage.set(dayTimestamp, dayUsage.get(dayTimestamp) + 1);
                         currentAmount += site.distance * rate;
+                        tripAdded = true;
                     }
-
-                    dayIndex = potentialDayIndex + 1;
-                    if (currentAmount >= target) break;
+                    shortTripIndex++;
                 }
-                 if (currentAmount >= target) break;
+                if (!tripAdded && shortTripIndex > days.length * shortTripSites.length) break; // Exit if no progress
             }
 
+            // --- PHASE 2: Fill remaining empty days with long trips ---
+            if (currentAmount < target) {
+                const emptyDays = days.filter(day => dayUsage.get(day.getTime()) === 0);
+                let emptyDayIndex = 0;
+                for (const site of longTripSites) {
+                    if (currentAmount >= target) break;
+                    if (emptyDayIndex >= emptyDays.length) break;
+
+                    const hasExistingTrip = site.allocation.some(a => a.trips > 0);
+                    if (site.isSingleTrip && hasExistingTrip) continue;
+
+                    const day = emptyDays[emptyDayIndex];
+                    let dayAlloc = { date: day, trips: 1 };
+                    site.allocation.push(dayAlloc);
+                    currentAmount += site.distance * rate;
+                    emptyDayIndex++;
+                }
+            }
+            
             const batch = writeBatch(db);
             sites.forEach(site => batch.set(doc(db, 'sites', String(site.id)), toFirestore(site)));
             await batch.commit();
