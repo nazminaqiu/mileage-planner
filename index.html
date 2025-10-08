@@ -407,6 +407,22 @@
         .position-relative {
             position: relative;
         }
+        
+        .remove-site-btn {
+            background: var(--danger-color);
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+            font-size: 16px;
+            line-height: 24px;
+            text-align: center;
+        }
+        .remove-site-btn:hover {
+            background: #bb2d3b;
+        }
 
         @media (max-width: 768px) {
             .header {
@@ -428,7 +444,7 @@
     <div class="container">
         <div class="header">
             <h1>🚗 Mileage Claim Planner</h1>
-            <button class="theme-toggle" onclick="toggleTheme()">🌙 Toggle Theme</button>
+            <button id="themeToggleBtn" class="theme-toggle">🌙 Toggle Theme</button>
         </div>
 
         <!-- API Status -->
@@ -445,8 +461,8 @@
                     <label>Google Maps API Key</label>
                     <input type="text" id="apiKeyField" placeholder="Enter your API key here">
                 </div>
-                <button class="btn btn-primary" onclick="validateAndSaveAPIKey()">🔑 Validate & Save API Key</button>
-                <button class="btn btn-secondary" onclick="showAPIKeyHelp()">❓ How to get API Key</button>
+                <button id="validateApiKeyBtn" class="btn btn-primary">🔑 Validate & Save API Key</button>
+                <button id="apiKeyHelpBtn" class="btn btn-secondary">❓ How to get API Key</button>
             </div>
             <div id="apiMessage" class="alert alert-info" style="display: none;">
                 Validating Google Maps API...
@@ -464,7 +480,7 @@
             </div>
             
             <div class="btn-group">
-                <button class="btn btn-secondary" onclick="useCurrentLocation()">📍 Use Current GPS Location</button>
+                <button id="useGpsBtn" class="btn btn-secondary">📍 Use Current GPS Location</button>
             </div>
 
             <div class="input-group">
@@ -513,7 +529,7 @@
                 <div id="siteAddressDropdown" class="autocomplete-dropdown" style="display: none;"></div>
             </div>
 
-            <button class="btn btn-primary" onclick="addSite()">➕ Add Site</button>
+            <button id="addSiteBtn" class="btn btn-primary">➕ Add Site</button>
         </div>
 
         <!-- Sites List -->
@@ -526,8 +542,8 @@
         <div class="section">
             <div class="section-title">🎯 Smart Allocation</div>
             <div id="allocationAlert"></div>
-            <button class="btn btn-success" onclick="autoAllocate()">✨ Auto Allocate</button>
-            <button class="btn btn-secondary" onclick="clearAllocation()">🗑️ Clear All</button>
+            <button id="autoAllocateBtn" class="btn btn-success">✨ Auto Allocate</button>
+            <button id="clearAllocationBtn" class="btn btn-secondary">🗑️ Clear All</button>
         </div>
 
         <!-- Summary -->
@@ -556,11 +572,35 @@
             </div>
         </div>
     </div>
+    
+    <script type="module">
+        // Import third-party libraries
+        import flatpickr from "https://cdn.jsdelivr.net/npm/flatpickr/+esm";
+        
+        // Import Firebase SDKs
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
+        import { getFirestore, doc, setDoc, getDoc, getDocs, collection, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
-    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
-    <script>
+        // Your web app's Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCfq5zOyd0nJQ61durfVvvNals789n4-WE",
+            authDomain: "mileage-planner.firebaseapp.com",
+            databaseURL: "https://mileage-planner-default-rtdb.asia-southeast1.firebasedatabase.app",
+            projectId: "mileage-planner",
+            storageBucket: "mileage-planner.appspot.com",
+            messagingSenderId: "924534923921",
+            appId: "1:924534923921:web:866e5cbbd3ae5b04175530",
+            measurementId: "G-6547J3HQ67"
+        };
+
+        // Initialize Firebase
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const db = getFirestore(app);
+
         // Global variables
-        let map, directionsService, autocompleteService, placesService;
+        let directionsService, autocompleteService, placesService;
         let sites = [];
         let config = {
             startPoint: '',
@@ -571,17 +611,148 @@
             includeSaturday: false,
             includeSunday: false
         };
-        let apiKey = ''; // User will insert their API key
+        let apiKey = '';
         let apiValidated = false;
 
-        // Initialize on page load
+        // --- DATA CONVERSION HELPERS ---
+        // Converts local state to a Firestore-safe format (e.g., Dates to ISO strings)
+        function toFirestore(data) {
+            const firestoreData = { ...data };
+            if (firestoreData.dateRange) {
+                firestoreData.dateRange.start = firestoreData.dateRange.start ? firestoreData.dateRange.start.toISOString() : null;
+                firestoreData.dateRange.end = firestoreData.dateRange.end ? firestoreData.dateRange.end.toISOString() : null;
+            }
+            if (firestoreData.allocation) {
+                firestoreData.allocation = firestoreData.allocation.map(a => ({ ...a, date: a.date.toISOString() }));
+            }
+            return firestoreData;
+        }
+
+        // Converts data from Firestore back to local state format (e.g., ISO strings to Dates)
+        function fromFirestore(data) {
+            const localData = { ...data };
+            if (localData.dateRange) {
+                localData.dateRange.start = localData.dateRange.start ? new Date(localData.dateRange.start) : null;
+                localData.dateRange.end = localData.dateRange.end ? new Date(localData.dateRange.end) : null;
+            }
+             if (localData.allocation) {
+                localData.allocation = localData.allocation.map(a => ({ ...a, date: new Date(a.date) }));
+            }
+            return localData;
+        }
+
+
+        // --- FIRESTORE FUNCTIONS ---
+        async function saveConfig() {
+            // Update local config object from UI
+            config.mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
+            config.targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
+            config.includeSaturday = document.getElementById('includeSaturday').checked;
+            config.includeSunday = document.getElementById('includeSunday').checked;
+            
+            try {
+                const configRef = doc(db, 'plannerData', 'config');
+                await setDoc(configRef, toFirestore(config));
+            } catch(e) { console.error("Error saving config:", e); }
+            
+            renderSites();
+            updateSummary();
+        }
+
+        async function saveSite(site) {
+             try {
+                const siteRef = doc(db, 'sites', site.id.toString());
+                await setDoc(siteRef, toFirestore(site));
+            } catch(e) { console.error("Error saving site:", e); }
+        }
+
+        async function loadData() {
+            try {
+                // Load Config
+                const configRef = doc(db, 'plannerData', 'config');
+                const configSnap = await getDoc(configRef);
+                if (configSnap.exists()) {
+                    config = fromFirestore(configSnap.data());
+                    // Update UI from loaded config
+                    document.getElementById('startPoint').value = config.startPoint || '';
+                    document.getElementById('mileageRate').value = config.mileageRate;
+                    document.getElementById('targetAmount').value = config.targetAmount;
+                    document.getElementById('includeSaturday').checked = config.includeSaturday;
+                    document.getElementById('includeSunday').checked = config.includeSunday;
+                    if (config.dateRange.start && config.dateRange.end) {
+                        const fp = document.getElementById('dateRange')._flatpickr;
+                        if (fp) fp.setDate([config.dateRange.start, config.dateRange.end]);
+                    }
+                }
+
+                // Load Sites
+                const sitesRef = collection(db, 'sites');
+                const sitesSnap = await getDocs(sitesRef);
+                sites = sitesSnap.docs.map(doc => fromFirestore(doc.data()));
+                
+                renderSites();
+                updateSummary();
+
+            } catch(e) { console.error("Error loading data:", e); }
+        }
+
+        // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', function() {
             loadTheme();
-            loadData();
-            initializeFlatpickr();
             setupEventListeners();
-            checkForAPIKey();
+            initializeFlatpickr();
+            checkForAPIKey(); // This will trigger loadData after API validation
         });
+
+        function setupEventListeners() {
+            document.getElementById('themeToggleBtn').addEventListener('click', toggleTheme);
+            document.getElementById('validateApiKeyBtn').addEventListener('click', validateAndSaveAPIKey);
+            document.getElementById('apiKeyHelpBtn').addEventListener('click', showAPIKeyHelp);
+            document.getElementById('useGpsBtn').addEventListener('click', useCurrentLocation);
+            document.getElementById('addSiteBtn').addEventListener('click', addSite);
+            document.getElementById('autoAllocateBtn').addEventListener('click', autoAllocate);
+            document.getElementById('clearAllocationBtn').addEventListener('click', clearAllocation);
+
+            // Inputs
+            document.getElementById('startPoint').addEventListener('input', handleStartPointInput);
+            document.getElementById('siteAddress').addEventListener('input', handleSiteAddressInput);
+            document.getElementById('mileageRate').addEventListener('change', saveConfig);
+            document.getElementById('targetAmount').addEventListener('change', saveConfig);
+            document.getElementById('includeSaturday').addEventListener('change', saveConfig);
+            document.getElementById('includeSunday').addEventListener('change', saveConfig);
+            document.getElementById('mileageRate').addEventListener('input', updateSummary);
+            document.getElementById('targetAmount').addEventListener('input', updateSummary);
+
+            // Event Delegation for dynamic elements
+            const sitesList = document.getElementById('sitesList');
+            sitesList.addEventListener('click', async (e) => {
+                if (e.target.classList.contains('remove-site-btn')) {
+                    const siteId = parseInt(e.target.dataset.siteId);
+                    await removeSite(siteId);
+                }
+            });
+            sitesList.addEventListener('change', async (e) => {
+                 if (e.target.classList.contains('trip-input')) {
+                    const siteId = parseInt(e.target.dataset.siteId);
+                    const dateStr = e.target.dataset.dateStr;
+                    const trips = e.target.value;
+                    await updateTrips(siteId, dateStr, trips);
+                }
+            });
+        }
+        
+        // --- THEME & API KEY ---
+        function toggleTheme() {
+            const html = document.documentElement;
+            const newTheme = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
 
         function checkForAPIKey() {
             const savedKey = localStorage.getItem('googleMapsApiKey');
@@ -591,7 +762,6 @@
                 document.getElementById('apiMessage').style.display = 'block';
                 loadGoogleMapsAPI();
             } else {
-                // Show API key input form
                 document.getElementById('apiKeyInput').style.display = 'block';
                 document.getElementById('apiMessage').style.display = 'none';
             }
@@ -599,59 +769,42 @@
 
         function validateAndSaveAPIKey() {
             const keyInput = document.getElementById('apiKeyField').value.trim();
-            
-            if (!keyInput) {
-                alert('Please enter an API key');
-                return;
-            }
-
+            if (!keyInput) { alert('Please enter an API key'); return; }
             apiKey = keyInput;
             localStorage.setItem('googleMapsApiKey', apiKey);
-            
             document.getElementById('apiKeyInput').style.display = 'none';
             document.getElementById('apiMessage').style.display = 'block';
-            
             loadGoogleMapsAPI();
         }
 
         function showAPIKeyHelp() {
-            const helpText = `How to get Google Maps API Key:
-
-1. Go to Google Cloud Console: https://console.cloud.google.com/
-2. Create a new project or select existing one
-3. Enable these APIs:
-   - Maps JavaScript API
-   - Places API
-   - Directions API
-   - Geocoding API
-4. Go to "Credentials" and create an API Key
-5. Copy the API key and paste it above
-
-Note: You may need to set up billing, but Google provides $200 free credit monthly.`;
-            
-            alert(helpText);
+            alert(`How to get Google Maps API Key:\n\n1. Go to Google Cloud Console: https://console.cloud.google.com/\n2. Create a new project or select an existing one\n3. Enable these APIs:\n   - Maps JavaScript API\n   - Places API\n   - Directions API\n   - Geocoding API\n4. Go to "Credentials" and create an API Key\n5. Copy the API key and paste it here\n\nNote: You may need to set up billing, but Google provides $200 free credit monthly.`);
         }
 
+        // --- GOOGLE MAPS API ---
         function loadGoogleMapsAPI() {
+            if (document.querySelector('script[src*="maps.googleapis.com"]')) {
+                console.log("Google Maps API script already loaded.");
+                return;
+            }
             const script = document.createElement('script');
             script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initMap`;
             script.async = true;
             script.defer = true;
             script.onerror = () => updateAPIStatus(false, 'Failed to load Google Maps API. Check your API key and internet connection.');
+            window.initMap = initMap; // Make initMap globally accessible
             document.head.appendChild(script);
         }
-
+        
         function initMap() {
             try {
                 directionsService = new google.maps.DirectionsService();
                 autocompleteService = new google.maps.places.AutocompleteService();
-                
-                // Create a temporary div for PlacesService
                 const tempDiv = document.createElement('div');
                 placesService = new google.maps.places.PlacesService(tempDiv);
-                
                 apiValidated = true;
                 updateAPIStatus(true, 'Google Maps API validated successfully!');
+                loadData(); // Load data from Firestore now that API is ready
             } catch (error) {
                 apiValidated = false;
                 updateAPIStatus(false, `API validation failed: ${error.message}`);
@@ -661,7 +814,6 @@ Note: You may need to set up billing, but Google provides $200 free credit month
         function updateAPIStatus(success, message) {
             const badge = document.getElementById('apiStatusBadge');
             const messageEl = document.getElementById('apiMessage');
-            
             if (success) {
                 badge.className = 'status-badge status-success';
                 badge.textContent = 'Connected';
@@ -674,95 +826,46 @@ Note: You may need to set up billing, but Google provides $200 free credit month
             messageEl.textContent = message;
         }
 
-        function setupEventListeners() {
-            document.getElementById('startPoint').addEventListener('input', handleStartPointInput);
-            document.getElementById('siteAddress').addEventListener('input', handleSiteAddressInput);
-            document.getElementById('mileageRate').addEventListener('change', saveConfig);
-            document.getElementById('targetAmount').addEventListener('change', saveConfig);
-            document.getElementById('includeSaturday').addEventListener('change', saveConfig);
-            document.getElementById('includeSunday').addEventListener('change', saveConfig);
-
-            // Auto-save on input
-            document.getElementById('mileageRate').addEventListener('input', updateSummary);
-            document.getElementById('targetAmount').addEventListener('input', updateSummary);
-        }
-
+        // --- UI & LOGIC FUNCTIONS ---
         function initializeFlatpickr() {
-            // Wait for flatpickr to be fully loaded
-            if (typeof flatpickr === 'undefined') {
-                setTimeout(initializeFlatpickr, 100);
-                return;
-            }
-
             const dateInput = document.getElementById('dateRange');
-            if (!dateInput) {
-                setTimeout(initializeFlatpickr, 100);
-                return;
-            }
-
-            try {
-                const fp = flatpickr(dateInput, {
-                    mode: 'range',
-                    dateFormat: 'Y-m-d',
-                    allowInput: false,
-                    clickOpens: true,
-                    disableMobile: false,
-                    onChange: function(selectedDates) {
-                        if (selectedDates.length === 2) {
-                            config.dateRange.start = new Date(selectedDates[0]);
-                            config.dateRange.end = new Date(selectedDates[1]);
-                            saveConfig();
-                            renderSites();
-                            updateSummary();
-                        }
-                    },
-                    onReady: function(selectedDates, dateStr, instance) {
-                        console.log('Flatpickr ready');
+            dateInput._flatpickr = flatpickr(dateInput, {
+                mode: 'range',
+                dateFormat: 'Y-m-d',
+                onChange: function(selectedDates) {
+                    if (selectedDates.length === 2) {
+                        config.dateRange.start = new Date(selectedDates[0]);
+                        config.dateRange.end = new Date(selectedDates[1]);
+                        saveConfig();
                     }
-                });
-
-                // Store flatpickr instance for later use
-                dateInput._flatpickr = fp;
-            } catch (error) {
-                console.error('Flatpickr initialization error:', error);
-                // Fallback: try again after a delay
-                setTimeout(initializeFlatpickr, 500);
-            }
+                },
+            });
         }
-
+        
         function handleStartPointInput(e) {
             const value = e.target.value;
             if (value.length < 3 || !apiValidated) return;
-
-            autocompleteService.getPlacePredictions(
-                { input: value },
-                (predictions, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        showAutocomplete('startPointDropdown', predictions, selectStartPoint);
-                    }
+            autocompleteService.getPlacePredictions({ input: value }, (predictions, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK) {
+                    showAutocomplete('startPointDropdown', predictions, selectStartPoint);
                 }
-            );
+            });
         }
 
         function handleSiteAddressInput(e) {
             const value = e.target.value;
             if (value.length < 3 || !apiValidated) return;
-
-            autocompleteService.getPlacePredictions(
-                { input: value },
-                (predictions, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        showAutocomplete('siteAddressDropdown', predictions, selectSiteAddress);
-                    }
+            autocompleteService.getPlacePredictions({ input: value }, (predictions, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK) {
+                    showAutocomplete('siteAddressDropdown', predictions, selectSiteAddress);
                 }
-            );
+            });
         }
 
         function showAutocomplete(dropdownId, predictions, callback) {
             const dropdown = document.getElementById(dropdownId);
             dropdown.innerHTML = '';
             dropdown.style.display = 'block';
-
             predictions.forEach(prediction => {
                 const item = document.createElement('div');
                 item.className = 'autocomplete-item';
@@ -770,34 +873,25 @@ Note: You may need to set up billing, but Google provides $200 free credit month
                 item.onclick = () => callback(prediction);
                 dropdown.appendChild(item);
             });
-
-            // Close dropdown when clicking outside
             document.addEventListener('click', function closeDropdown(e) {
                 if (!dropdown.contains(e.target)) {
                     dropdown.style.display = 'none';
                     document.removeEventListener('click', closeDropdown);
                 }
-            });
+            }, { once: true });
         }
 
         function selectStartPoint(prediction) {
             document.getElementById('startPoint').value = prediction.description;
             document.getElementById('startPointDropdown').style.display = 'none';
-            
-            placesService.getDetails(
-                { placeId: prediction.place_id },
-                (place, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK) {
-                        config.startPoint = prediction.description;
-                        config.startPointCoords = {
-                            lat: place.geometry.location.lat(),
-                            lng: place.geometry.location.lng()
-                        };
-                        saveConfig();
-                        recalculateAllDistances();
-                    }
+            placesService.getDetails({ placeId: prediction.place_id }, (place, status) => {
+                if (status === google.maps.places.PlacesServiceStatus.OK) {
+                    config.startPoint = prediction.description;
+                    config.startPointCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+                    saveConfig();
+                    recalculateAllDistances();
                 }
-            );
+            });
         }
 
         function selectSiteAddress(prediction) {
@@ -806,115 +900,78 @@ Note: You may need to set up billing, but Google provides $200 free credit month
         }
 
         function useCurrentLocation() {
-            if (!navigator.geolocation) {
-                alert('Geolocation is not supported by your browser');
-                return;
-            }
-
-            navigator.geolocation.getCurrentPosition(
-                (position) => {
-                    const coords = {
-                        lat: position.coords.latitude,
-                        lng: position.coords.longitude
-                    };
-                    
-                    const geocoder = new google.maps.Geocoder();
-                    geocoder.geocode({ location: coords }, (results, status) => {
-                        if (status === 'OK' && results[0]) {
-                            document.getElementById('startPoint').value = results[0].formatted_address;
-                            config.startPoint = results[0].formatted_address;
-                            config.startPointCoords = coords;
-                            saveConfig();
-                            recalculateAllDistances();
-                        }
-                    });
-                },
-                (error) => {
-                    alert('Error getting location: ' + error.message);
-                }
-            );
+            if (!navigator.geolocation) { alert('Geolocation is not supported by your browser'); return; }
+            navigator.geolocation.getCurrentPosition((position) => {
+                const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
+                const geocoder = new google.maps.Geocoder();
+                geocoder.geocode({ location: coords }, (results, status) => {
+                    if (status === 'OK' && results[0]) {
+                        document.getElementById('startPoint').value = results[0].formatted_address;
+                        config.startPoint = results[0].formatted_address;
+                        config.startPointCoords = coords;
+                        saveConfig();
+                        recalculateAllDistances();
+                    }
+                });
+            }, (error) => alert('Error getting location: ' + error.message));
         }
 
-        function addSite() {
-            if (!apiValidated) {
-                alert('Please wait for API validation to complete');
-                return;
-            }
-
+        async function addSite() {
+            if (!apiValidated) { alert('Please wait for API validation to complete'); return; }
             const name = document.getElementById('siteName').value.trim();
             const address = document.getElementById('siteAddress').value.trim();
+            if (!name || !address) { alert('Please enter both site name and address'); return; }
+            if (!config.startPoint) { alert('Please set your start point first'); return; }
 
-            if (!name || !address) {
-                alert('Please enter both site name and address');
-                return;
-            }
-
-            if (!config.startPoint) {
-                alert('Please set your start point first');
-                return;
-            }
-
-            const site = {
-                id: Date.now(),
-                name: name,
-                address: address,
-                distance: 0,
-                allocation: []
-            };
-
+            const site = { id: Date.now(), name, address, distance: 0, allocation: [] };
             sites.push(site);
-            calculateDistance(site);
+            await calculateDistance(site); // This now saves the site after calculation
             
             document.getElementById('siteName').value = '';
             document.getElementById('siteAddress').value = '';
-            
-            saveData();
             renderSites();
         }
 
         function calculateDistance(site) {
-            if (!config.startPointCoords) {
-                alert('Start point coordinates not available. Please select start point again.');
-                return;
-            }
-
-            // Get coordinates for destination
-            placesService.findPlaceFromQuery(
-                { query: site.address, fields: ['geometry'] },
-                (results, status) => {
+             return new Promise((resolve, reject) => {
+                if (!config.startPointCoords) {
+                    alert('Start point coordinates not available. Please select start point again.');
+                    return reject();
+                }
+                placesService.findPlaceFromQuery({ query: site.address, fields: ['geometry'] }, (results, status) => {
                     if (status === google.maps.places.PlacesServiceStatus.OK && results[0]) {
                         const destination = results[0].geometry.location;
-                        
-                        // Calculate round-trip using real route
-                        directionsService.route(
-                            {
-                                origin: new google.maps.LatLng(config.startPointCoords.lat, config.startPointCoords.lng),
-                                destination: destination,
-                                travelMode: google.maps.TravelMode.DRIVING
-                            },
-                            (result, status) => {
-                                if (status === google.maps.DirectionsStatus.OK) {
-                                    const distance = result.routes[0].legs[0].distance.value / 1000; // Convert to km
-                                    site.distance = Math.round(distance * 2 * 100) / 100; // Round-trip
-                                    saveData();
-                                    renderSites();
-                                    updateSummary();
-                                }
-                            }
-                        );
-                    }
-                }
-            );
+                        directionsService.route({
+                            origin: new google.maps.LatLng(config.startPointCoords.lat, config.startPointCoords.lng),
+                            destination,
+                            travelMode: google.maps.TravelMode.DRIVING
+                        }, async (result, status) => {
+                            if (status === google.maps.DirectionsStatus.OK) {
+                                const distance = result.routes[0].legs[0].distance.value / 1000;
+                                site.distance = Math.round(distance * 2 * 100) / 100;
+                                await saveSite(site); // Save to Firestore
+                                renderSites();
+                                updateSummary();
+                                resolve();
+                            } else { reject(); }
+                        });
+                    } else { reject(); }
+                });
+            });
         }
 
-        function recalculateAllDistances() {
-            sites.forEach(site => calculateDistance(site));
+        async function recalculateAllDistances() {
+            for (const site of sites) {
+                await calculateDistance(site);
+            }
         }
 
-        function removeSite(siteId) {
+        async function removeSite(siteId) {
             if (confirm('Are you sure you want to remove this site?')) {
                 sites = sites.filter(s => s.id !== siteId);
-                saveData();
+                try {
+                    await deleteDoc(doc(db, 'sites', siteId.toString()));
+                } catch(e) { console.error("Error removing site:", e); }
                 renderSites();
                 updateSummary();
             }
@@ -922,134 +979,102 @@ Note: You may need to set up billing, but Google provides $200 free credit month
 
         function getDaysInRange() {
             if (!config.dateRange.start || !config.dateRange.end) return [];
-            
             const days = [];
-            const current = new Date(config.dateRange.start);
+            let current = new Date(config.dateRange.start);
             const end = new Date(config.dateRange.end);
-            
             while (current <= end) {
                 const dayOfWeek = current.getDay();
-                const isSaturday = dayOfWeek === 6;
-                const isSunday = dayOfWeek === 0;
-                
-                if ((!isSaturday && !isSunday) || 
-                    (isSaturday && config.includeSaturday) || 
-                    (isSunday && config.includeSunday)) {
+                if ((dayOfWeek !== 0 && dayOfWeek !== 6) || (dayOfWeek === 6 && config.includeSaturday) || (dayOfWeek === 0 && config.includeSunday)) {
                     days.push(new Date(current));
                 }
                 current.setDate(current.getDate() + 1);
             }
-            
             return days;
         }
 
-        function autoAllocate() {
-            if (sites.length === 0) {
-                alert('Please add at least one site first');
-                return;
-            }
-
-            if (!config.dateRange.start || !config.dateRange.end) {
-                alert('Please select a date range first');
-                return;
-            }
-
+        async function autoAllocate() {
+            if (sites.length === 0) { alert('Please add at least one site first'); return; }
+            if (!config.dateRange.start) { alert('Please select a date range first'); return; }
             const target = parseFloat(document.getElementById('targetAmount').value) || 0;
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
-            
-            if (target <= 0) {
-                alert('Please set a target amount greater than 0');
-                return;
-            }
-
+            if (target <= 0) { alert('Please set a target amount greater than 0'); return; }
             const days = getDaysInRange();
-            if (days.length === 0) {
-                alert('No available days in the selected range');
-                return;
-            }
-
-            // Clear existing allocation
-            sites.forEach(site => site.allocation = []);
-
-            // Smart allocation algorithm
-            // Strategy: Distribute trips to maximize efficiency
-            // Prioritize farther sites (better value per trip)
-            const sortedSites = [...sites].sort((a, b) => b.distance - a.distance);
+            if (days.length === 0) { alert('No available days in the selected range'); return; }
             
+            sites.forEach(site => site.allocation = []);
+            const sortedSites = [...sites].sort((a, b) => b.distance - a.distance);
             let currentAmount = 0;
             let dayIndex = 0;
-            const maxTripsPerDay = 3; // Safety limit
+            const maxTripsPerDay = 3;
 
             while (currentAmount < target && dayIndex < days.length * maxTripsPerDay * sites.length) {
                 for (let site of sortedSites) {
                     if (currentAmount >= target) break;
-                    
-                    const dayIdx = dayIndex % days.length;
-                    const day = days[dayIdx];
-                    
-                    // Check if this site already has allocation for this day
+                    const day = days[dayIndex % days.length];
                     let dayAlloc = site.allocation.find(a => a.date.getTime() === day.getTime());
-                    
                     if (!dayAlloc) {
-                        dayAlloc = { date: new Date(day), trips: 0 };
+                        dayAlloc = { date: day, trips: 0 };
                         site.allocation.push(dayAlloc);
                     }
-                    
                     if (dayAlloc.trips < maxTripsPerDay) {
                         dayAlloc.trips++;
                         currentAmount += site.distance * rate;
                     }
-                    
                     dayIndex++;
                 }
             }
 
-            if (currentAmount < target) {
-                const shortfall = target - currentAmount;
-                showAllocationAlert('warning', 
-                    `Target not fully met. Shortfall: RM ${shortfall.toFixed(2)}. ` +
-                    `Consider: 1) Adding more sites, 2) Extending date range, 3) Including weekends, or 4) Manually adding trips.`
-                );
-            } else {
-                showAllocationAlert('info', 
-                    `Allocation complete! Total: RM ${currentAmount.toFixed(2)} (${((currentAmount/target)*100).toFixed(1)}% of target)`
-                );
-            }
+            // Batch save all updated sites to Firestore
+            const batch = writeBatch(db);
+            sites.forEach(site => {
+                const siteRef = doc(db, 'sites', site.id.toString());
+                batch.set(siteRef, toFirestore(site));
+            });
+            await batch.commit();
 
-            saveData();
+            if (currentAmount < target) {
+                showAllocationAlert('warning', `Target not fully met. Shortfall: RM ${(target - currentAmount).toFixed(2)}. Consider adding more sites, extending the date range, or manually adding trips.`);
+            } else {
+                showAllocationAlert('info', `Allocation complete! Total: RM ${currentAmount.toFixed(2)} (${((currentAmount/target)*100).toFixed(1)}% of target)`);
+            }
             renderSites();
             updateSummary();
         }
 
-        function clearAllocation() {
+        async function clearAllocation() {
             if (confirm('Clear all trip allocations?')) {
                 sites.forEach(site => site.allocation = []);
-                saveData();
+                 const batch = writeBatch(db);
+                 sites.forEach(site => {
+                    const siteRef = doc(db, 'sites', site.id.toString());
+                    batch.set(siteRef, toFirestore(site));
+                });
+                await batch.commit();
                 renderSites();
                 updateSummary();
             }
         }
 
-        function updateTrips(siteId, dateStr, trips) {
+        async function updateTrips(siteId, dateStr, trips) {
             const site = sites.find(s => s.id === siteId);
             if (!site) return;
-
             const date = new Date(dateStr);
             let dayAlloc = site.allocation.find(a => a.date.getTime() === date.getTime());
             
-            if (!dayAlloc && trips > 0) {
-                dayAlloc = { date: date, trips: 0 };
-                site.allocation.push(dayAlloc);
+            const numTrips = Math.max(0, parseInt(trips) || 0);
+
+            if (numTrips > 0) {
+                 if (!dayAlloc) {
+                    dayAlloc = { date, trips: numTrips };
+                    site.allocation.push(dayAlloc);
+                } else {
+                    dayAlloc.trips = numTrips;
+                }
+            } else { // trips are 0, remove allocation
+                site.allocation = site.allocation.filter(a => a.date.getTime() !== date.getTime());
             }
             
-            if (dayAlloc) {
-                dayAlloc.trips = Math.max(0, parseInt(trips) || 0);
-                if (dayAlloc.trips === 0) {
-                    site.allocation = site.allocation.filter(a => a.date.getTime() !== date.getTime());
-                }
-            }
-
-            saveData();
+            await saveSite(site);
             updateSummary();
         }
 
@@ -1060,27 +1085,23 @@ Note: You may need to set up billing, but Google provides $200 free credit month
             alertDiv.style.display = 'block';
         }
 
+        // --- RENDERING & SUMMARY ---
         function renderSites() {
             const container = document.getElementById('sitesList');
-            
             if (sites.length === 0) {
                 container.innerHTML = '<div class="alert alert-info">No sites added yet. Add your first project site above.</div>';
                 return;
             }
-
             const days = getDaysInRange();
-            
             container.innerHTML = sites.map(site => `
                 <div class="site-card">
                     <div class="site-header">
                         <div class="site-info">
                             <div class="site-name">${site.name}</div>
                             <div class="site-address">${site.address}</div>
-                            <div class="site-distance">
-                                ${site.distance > 0 ? `${site.distance} km (round-trip)` : 'Calculating...'}
-                            </div>
+                            <div class="site-distance">${site.distance > 0 ? `${site.distance} km (round-trip)` : 'Calculating...'}</div>
                         </div>
-                        <button class="btn btn-danger" onclick="removeSite(${site.id})">✕</button>
+                        <button class="remove-site-btn" data-site-id="${site.id}">✕</button>
                     </div>
                     ${days.length > 0 ? `
                         <div class="allocation-grid">
@@ -1089,35 +1110,26 @@ Note: You may need to set up billing, but Google provides $200 free credit month
                                 const dayName = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                                 const alloc = site.allocation.find(a => a.date.toISOString().split('T')[0] === dateStr);
                                 const trips = alloc ? alloc.trips : 0;
-                                
                                 return `
                                     <div class="day-allocation">
                                         <div class="day-label">${dayName}</div>
-                                        <input type="number" class="trip-input" 
-                                               value="${trips}" 
-                                               min="0" 
-                                               max="10"
-                                               onchange="updateTrips(${site.id}, '${dateStr}', this.value)">
-                                    </div>
-                                `;
+                                        <input type="number" class="trip-input" value="${trips}" min="0" max="10" 
+                                            data-site-id="${site.id}" data-date-str="${dateStr}">
+                                    </div>`;
                             }).join('')}
-                        </div>
-                    ` : '<div class="alert alert-warning">Select a date range to allocate trips</div>'}
-                </div>
-            `).join('');
+                        </div>` : '<div class="alert alert-warning">Select a date range to allocate trips</div>'}
+                </div>`).join('');
         }
 
         function updateSummary() {
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
             const target = parseFloat(document.getElementById('targetAmount').value) || 0;
-            
             let totalDistance = 0;
             sites.forEach(site => {
                 site.allocation.forEach(alloc => {
                     totalDistance += site.distance * alloc.trips;
                 });
             });
-            
             const totalAmount = totalDistance * rate;
             const progress = target > 0 ? Math.min((totalAmount / target) * 100, 100) : 0;
             
@@ -1125,82 +1137,12 @@ Note: You may need to set up billing, but Google provides $200 free credit month
             document.getElementById('totalAmount').textContent = `RM ${totalAmount.toFixed(2)}`;
             document.getElementById('targetDisplay').textContent = `RM ${target.toFixed(2)}`;
             document.getElementById('progressPercent').textContent = `${progress.toFixed(1)}%`;
-            document.getElementById('progressBar').style.width = `${progress}%`;
             
-            // Update progress bar color
             const progressBar = document.getElementById('progressBar');
-            if (progress >= 100) {
-                progressBar.style.background = 'var(--success-color)';
-            } else if (progress >= 75) {
-                progressBar.style.background = 'var(--warning-color)';
-            } else {
-                progressBar.style.background = 'var(--accent-color)';
-            }
-        }
-
-        function saveConfig() {
-            config.mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
-            config.targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
-            config.includeSaturday = document.getElementById('includeSaturday').checked;
-            config.includeSunday = document.getElementById('includeSunday').checked;
-            
-            localStorage.setItem('mileageConfig', JSON.stringify(config));
-            renderSites();
-            updateSummary();
-        }
-
-        function saveData() {
-            localStorage.setItem('mileageSites', JSON.stringify(sites));
-            localStorage.setItem('mileageConfig', JSON.stringify(config));
-        }
-
-        function loadData() {
-            const savedConfig = localStorage.getItem('mileageConfig');
-            if (savedConfig) {
-                config = JSON.parse(savedConfig);
-                
-                // Restore dates
-                if (config.dateRange.start) config.dateRange.start = new Date(config.dateRange.start);
-                if (config.dateRange.end) config.dateRange.end = new Date(config.dateRange.end);
-                
-                document.getElementById('startPoint').value = config.startPoint || '';
-                document.getElementById('mileageRate').value = config.mileageRate;
-                document.getElementById('targetAmount').value = config.targetAmount;
-                document.getElementById('includeSaturday').checked = config.includeSaturday;
-                document.getElementById('includeSunday').checked = config.includeSunday;
-                
-                if (config.dateRange.start && config.dateRange.end) {
-                    const fp = document.getElementById('dateRange')._flatpickr;
-                    if (fp) fp.setDate([config.dateRange.start, config.dateRange.end]);
-                }
-            }
-
-            const savedSites = localStorage.getItem('mileageSites');
-            if (savedSites) {
-                sites = JSON.parse(savedSites);
-                // Restore dates in allocations
-                sites.forEach(site => {
-                    site.allocation = site.allocation.map(a => ({
-                        ...a,
-                        date: new Date(a.date)
-                    }));
-                });
-                renderSites();
-                updateSummary();
-            }
-        }
-
-        function toggleTheme() {
-            const html = document.documentElement;
-            const currentTheme = html.getAttribute('data-theme');
-            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-            html.setAttribute('data-theme', newTheme);
-            localStorage.setItem('theme', newTheme);
-        }
-
-        function loadTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
+            progressBar.style.width = `${progress}%`;
+            if (progress >= 100) progressBar.style.background = 'var(--success-color)';
+            else if (progress >= 75) progressBar.style.background = 'var(--warning-color)';
+            else progressBar.style.background = 'var(--accent-color)';
         }
     </script>
 </body>
