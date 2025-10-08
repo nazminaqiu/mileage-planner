@@ -573,7 +573,6 @@
             <div class="btn-group">
                 <button id="autoAllocateBtn" class="btn btn-success">✨ Auto Allocate</button>
                 <button id="clearAllocationBtn" class="btn btn-secondary">🗑️ Clear All</button>
-                <!-- ADDED: New button to meet the target -->
                 <button id="meetTargetBtn" class="btn btn-warning" disabled>🎯 Meet Target</button>
             </div>
         </div>
@@ -732,7 +731,6 @@
             document.getElementById('mileageRate').addEventListener('input', updateSummary);
             document.getElementById('targetAmount').addEventListener('input', updateSummary);
             document.getElementById('exportCsvBtn').addEventListener('click', exportToCsv);
-            // ADDED: Event listener for the new "Meet Target" button
             document.getElementById('meetTargetBtn').addEventListener('click', meetTarget);
 
             const sitesList = document.getElementById('sitesList');
@@ -912,15 +910,11 @@
             const name = document.getElementById('siteName').value.trim();
             const address = document.getElementById('siteAddress').value.trim();
             const isSingleTrip = document.getElementById('isSingleTripCheckbox').checked;
-            
-            // MODIFIED: Clear the isAdjusted flag when adding a new site
             const site = { id: Date.now(), name, address, distance: 0, allocation: [], isSingleTrip, isAdjusted: false };
             sites.push(site);
-
             document.getElementById('siteName').value = '';
             document.getElementById('siteAddress').value = '';
             document.getElementById('isSingleTripCheckbox').checked = false;
-
             renderSites();
             await calculateDistance(site);
         }
@@ -928,10 +922,7 @@
         function calculateDistance(site) {
              return new Promise((resolve, reject) => {
                 if (!config.startPointCoords) return reject(new Error('Start point not set.'));
-                
-                // MODIFIED: Reset adjustment flag when recalculating distance
                 site.isAdjusted = false;
-
                 placesService.findPlaceFromQuery({ query: site.address, fields: ['geometry'] }, (results, status) => {
                     if (status === 'OK' && results[0]) {
                         directionsService.route({
@@ -980,7 +971,7 @@
             return days;
         }
 
-        // MODIFIED: Complete overhaul of the allocation logic for better efficiency
+        // MODIFIED: Complete overhaul of allocation logic for fairness and efficiency
         async function autoAllocate() {
             if (sites.length === 0) return alert('Please add at least one site.');
             if (!config.dateRange.start) return alert('Please select a date range.');
@@ -989,10 +980,13 @@
             if (target <= 0) return alert('Please set a target amount > 0.');
             const days = getDaysInRange();
             if (days.length === 0) return alert('No available days in range.');
-            
+
             sites.forEach(site => {
                 site.allocation = [];
-                site.isAdjusted = false; // Reset adjustments
+                if (site.isAdjusted) { // Reset any distance tweaks
+                    recalculateAllDistances(); 
+                    return;
+                }
             });
             let currentAmount = 0;
             const maxTripsPerDay = 3;
@@ -1002,38 +996,37 @@
 
             const dayUsage = new Map();
             days.forEach(day => dayUsage.set(day.getTime(), 0));
-            
-            let continueAllocation = true;
 
-            // --- PHASE 1: Allocate short trips ---
-            while(continueAllocation) {
-                continueAllocation = false;
-                if (currentAmount >= target) break;
+            // --- PHASE 1: Round-robin allocation for short trips ---
+            if (shortTripSites.length > 0) {
+                let tripCounter = 0;
+                // Safety break to prevent infinite loops
+                const safetyLimit = days.length * shortTripSites.length * maxTripsPerDay;
 
-                for (const day of days) {
+                while (currentAmount < target && tripCounter < safetyLimit) {
+                    const site = shortTripSites[tripCounter % shortTripSites.length];
+                    const day = days[tripCounter % days.length];
                     const dayTs = day.getTime();
+                    
+                    tripCounter++;
+                    
+                    const totalTripsForSite = site.allocation.reduce((sum, a) => sum + a.trips, 0);
+                    if (site.isSingleTrip && totalTripsForSite >= 1) continue;
                     if (dayUsage.get(dayTs) >= maxTripsPerDay) continue;
-
-                    for (const site of shortTripSites) {
-                        if (currentAmount >= target) break;
-                        const totalTripsForSite = site.allocation.reduce((sum, a) => sum + a.trips, 0);
-                        if (site.isSingleTrip && totalTripsForSite >= 1) continue;
-
-                        let dayAlloc = site.allocation.find(a => a.date.getTime() === dayTs);
-                        if (!dayAlloc) {
-                            dayAlloc = { date: day, trips: 0 };
-                            site.allocation.push(dayAlloc);
-                        }
-                        dayAlloc.trips++;
-                        dayUsage.set(dayTs, dayUsage.get(dayTs) + 1);
-                        currentAmount += site.distance * rate;
-                        continueAllocation = true;
-                        break; 
+                    
+                    let dayAlloc = site.allocation.find(a => a.date.getTime() === dayTs);
+                    if (!dayAlloc) {
+                        dayAlloc = { date: day, trips: 0 };
+                        site.allocation.push(dayAlloc);
                     }
+
+                    dayAlloc.trips++;
+                    dayUsage.set(dayTs, dayUsage.get(dayTs) + 1);
+                    currentAmount += site.distance * rate;
                 }
             }
             
-            // --- PHASE 2: Allocate long trips ---
+            // --- PHASE 2: Fill empty days with long trips ---
             if (currentAmount < target) {
                 const emptyDays = days.filter(day => dayUsage.get(day.getTime()) === 0);
                 let emptyDayIndex = 0;
@@ -1064,19 +1057,22 @@
         }
 
         async function clearAllocation() {
-            if (confirm('Clear all trip allocations?')) {
+            if (confirm('Clear all trip allocations? This will also reset any adjusted distances.')) {
+                const sitesToRecalculate = sites.filter(s => s.isAdjusted);
                 sites.forEach(site => {
                     site.allocation = [];
-                    // Reset adjusted distance if it was changed
-                    if (site.isAdjusted) {
-                        // This requires recalculating the original distance
-                        // A simpler approach is to just clear allocations
-                        site.isAdjusted = false; 
-                    }
+                    site.isAdjusted = false; 
                 });
+                
                 const batch = writeBatch(db);
                 sites.forEach(site => batch.set(doc(db, 'sites', String(site.id)), toFirestore(site)));
                 await batch.commit();
+
+                // Recalculate original distance for any site that was adjusted
+                for (const site of sitesToRecalculate) {
+                    await calculateDistance(site);
+                }
+
                 renderSites();
                 updateSummary();
             }
@@ -1165,30 +1161,23 @@
             document.body.removeChild(link);
         }
 
-        // ADDED: Optimizer function to meet the target by adjusting one site
         async function meetTarget() {
             const targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
             if (rate === 0) return alert("Mileage rate cannot be zero.");
 
-            let currentAmount = 0;
-            sites.forEach(site => {
-                site.allocation.forEach(alloc => {
-                    currentAmount += site.distance * alloc.trips * rate;
-                });
-            });
+            let currentAmount = sites.reduce((sum, site) => 
+                sum + site.allocation.reduce((siteSum, alloc) => siteSum + (site.distance * alloc.trips), 0), 0) * rate;
 
             const shortfallAmount = targetAmount - currentAmount;
             if (shortfallAmount <= 0) return alert("Target already met or exceeded.");
             
             const shortfallDistance = shortfallAmount / rate;
 
-            // Find the best candidate site to adjust
             let bestSite = null;
             let maxTrips = 0;
 
             sites.forEach(site => {
-                // Candidate must be a regular, short-distance site
                 if (!site.isSingleTrip && site.distance <= 100) {
                     const totalTrips = site.allocation.reduce((sum, a) => sum + a.trips, 0);
                     if (totalTrips > maxTrips) {
@@ -1221,7 +1210,6 @@
             const days = getDaysInRange();
             container.innerHTML = sites.sort((a,b) => a.name.localeCompare(b.name)).map(site => {
                 const totalAllocatedTrips = site.allocation.reduce((acc, a) => acc + a.trips, 0);
-                // MODIFIED: Show "(Adjusted)" in the site name if applicable
                 const displayName = site.isAdjusted ? `${site.name} <span class="status-badge status-warning">Adjusted</span>` : site.name;
                 return `
                 <div class="site-card">
@@ -1278,7 +1266,6 @@
             else if (progress >= 75) progressBar.style.background = 'var(--warning-color)';
             else progressBar.style.background = 'var(--accent-color)';
 
-            // MODIFIED: Enable or disable the "Meet Target" button based on shortfall
             const meetTargetBtn = document.getElementById('meetTargetBtn');
             if (target > 0 && totalAmount < target) {
                 meetTargetBtn.disabled = false;
