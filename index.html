@@ -69,11 +69,6 @@
             <button class="theme-toggle" onclick="toggleTheme()">🌙 Toggle Theme</button>
         </div>
 
-        <!-- IMPORTANT SECURITY NOTICE -->
-        <!-- This app is configured with a public Firebase database. -->
-        <!-- Anyone with the URL can see and modify your data. -->
-        <!-- This is NOT secure and only intended for personal use. -->
-
         <!-- Configuration -->
         <div class="section">
             <div class="section-title">⚙️ Configuration</div>
@@ -172,64 +167,58 @@
 
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
 
-    <!-- ========= START: FIREBASE INTEGRATION ========= -->
+    <!-- ========= START: CORRECTED FIREBASE INTEGRATION ========= -->
     <script type="module">
-      // Import the functions you need from the SDKs
       import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
       import { getDatabase, ref, set, onValue } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-database.js";
 
-      // Your web app's Firebase configuration
       const firebaseConfig = {
         apiKey: "AIzaSyCfq5zOyd0nJQ61durfVvvNals789n4-WE",
         authDomain: "mileage-planner.firebaseapp.com",
         // !!! IMPORTANT: PASTE YOUR DATABASE URL FROM FIREBASE CONSOLE HERE !!!
-        databaseURL: "https://mileage-planner-default-rtdb.firebaseio.com",
+        databaseURL: "https://mileage-planner-default-rtdb.asia-southeast1.firebasedatabase.app/",
         projectId: "mileage-planner",
         storageBucket: "mileage-planner.appspot.com",
         messagingSenderId: "924534923921",
         appId: "1:924534923921:web:866e5cbbd3ae5b04175530"
       };
 
-      // Initialize Firebase
       const app = initializeApp(firebaseConfig);
       const database = getDatabase(app);
-
-      // Make Firebase functions globally accessible to your main application script
+      
+      // Make the database connection available to the other functions
       window.firebaseDb = {
         database: database,
         ref: ref,
         set: set,
         onValue: onValue
       };
+
+      // --- THIS IS THE KEY FIX ---
+      // Trigger the functions from your main script now
+      // This ensures they run AFTER Firebase is ready.
+      window.loadData();
+      window.loadGoogleMapsAPI();
     </script>
-    <!-- ========= END: FIREBASE INTEGRATION ========= -->
+    <!-- ========= END: CORRECTED FIREBASE INTEGRATION ========= -->
 
 
     <script>
         // Global variables
-        let map, directionsService, autocompleteService, placesService;
         let sites = [];
-        let config = {
-            startPoint: '',
-            startPointCoords: null,
-            mileageRate: 0.80,
-            targetAmount: 0,
-            dateRange: { start: null, end: null },
-            includeSaturday: false,
-            includeSunday: false
-        };
+        let config = { startPoint: '', startPointCoords: null, mileageRate: 0.80, targetAmount: 0, dateRange: { start: null, end: null }, includeSaturday: false, includeSunday: false };
         let apiValidated = false;
+        let directionsService, autocompleteService, placesService;
 
         // Initialize on page load
         document.addEventListener('DOMContentLoaded', function() {
             loadTheme();
             initializeFlatpickr();
             setupEventListeners();
-            loadGoogleMapsAPI(); // Load Google Maps API on startup
-            loadData(); // This will now load from Firebase
+            // The functions for loading data and maps are now called from the Firebase script
         });
 
-        function loadGoogleMapsAPI() {
+        window.loadGoogleMapsAPI = function() {
             // !!! IMPORTANT: PASTE YOUR GOOGLE MAPS API KEY HERE !!!
             const apiKey = "AIzaSyAJyhj-tFjwXh66pzEA-Eh7wdwubye3txo";
             
@@ -237,7 +226,6 @@
                 alert("Please enter your Google Maps API Key in the script to enable mapping features.");
                 return;
             }
-
             const script = document.createElement('script');
             script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initMap`;
             script.async = true;
@@ -246,6 +234,7 @@
             document.head.appendChild(script);
         }
 
+        // initMap is a global callback, so it doesn't need to be on the window object
         function initMap() {
             try {
                 directionsService = new google.maps.DirectionsService();
@@ -287,10 +276,6 @@
             });
         }
         
-        // ===================================================================
-        // ===== ALL FUNCTIONS BELOW THIS LINE ARE STANDARD APP LOGIC ======
-        // ===================================================================
-
         function handleStartPointInput(e) {
             const value = e.target.value;
             if (value.length < 3 || !apiValidated) return;
@@ -336,10 +321,7 @@
             placesService.getDetails({ placeId: prediction.place_id }, (place, status) => {
                 if (status === google.maps.places.PlacesServiceStatus.OK) {
                     config.startPoint = prediction.description;
-                    config.startPointCoords = {
-                        lat: place.geometry.location.lat(),
-                        lng: place.geometry.location.lng()
-                    };
+                    config.startPointCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
                     saveConfig();
                     recalculateAllDistances();
                 }
@@ -374,7 +356,7 @@
             const address = document.getElementById('siteAddress').value.trim();
             if (!name || !address) return alert('Please enter both site name and address');
             if (!config.startPoint) return alert('Please set your start point first');
-            const site = { id: Date.now(), name: name, address: address, distance: 0, allocation: [] };
+            const site = { id: Date.now(), name, address, distance: 0, allocation: [] };
             sites.push(site);
             calculateDistance(site);
             document.getElementById('siteName').value = '';
@@ -405,7 +387,7 @@
             });
         }
 
-        function recalculateAllDistances() { sites.forEach(site => calculateDistance(site)); }
+        function recalculateAllDistances() { sites.forEach(calculateDistance); }
 
         function removeSite(siteId) {
             if (confirm('Are you sure you want to remove this site?')) {
@@ -423,9 +405,7 @@
             const end = new Date(config.dateRange.end);
             while (current <= end) {
                 const dayOfWeek = current.getDay();
-                const isSaturday = dayOfWeek === 6;
-                const isSunday = dayOfWeek === 0;
-                if ((!isSaturday && !isSunday) || (isSaturday && config.includeSaturday) || (isSunday && config.includeSunday)) {
+                if ((dayOfWeek !== 6 && dayOfWeek !== 0) || (dayOfWeek === 6 && config.includeSaturday) || (dayOfWeek === 0 && config.includeSunday)) {
                     days.push(new Date(current));
                 }
                 current.setDate(current.getDate() + 1);
@@ -435,7 +415,7 @@
 
         function autoAllocate() {
             if (sites.length === 0) return alert('Please add at least one site first');
-            if (!config.dateRange.start || !config.dateRange.end) return alert('Please select a date range first');
+            if (!config.dateRange.start) return alert('Please select a date range first');
             const target = parseFloat(document.getElementById('targetAmount').value) || 0;
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
             if (target <= 0) return alert('Please set a target amount greater than 0');
@@ -445,7 +425,7 @@
             const sortedSites = [...sites].sort((a, b) => b.distance - a.distance);
             let currentAmount = 0; let dayIndex = 0; const maxTripsPerDay = 3;
             while (currentAmount < target && dayIndex < days.length * maxTripsPerDay * sites.length) {
-                for (let site of sortedSites) {
+                for (const site of sortedSites) {
                     if (currentAmount >= target) break;
                     const day = days[dayIndex % days.length];
                     let dayAlloc = site.allocation.find(a => a.date.getTime() === day.getTime());
@@ -460,11 +440,9 @@
                     dayIndex++;
                 }
             }
-            if (currentAmount < target) {
-                showAllocationAlert('warning', `Target not fully met. Shortfall: RM ${(target - currentAmount).toFixed(2)}.`);
-            } else {
-                showAllocationAlert('info', `Allocation complete! Total: RM ${currentAmount.toFixed(2)}`);
-            }
+            showAllocationAlert(currentAmount < target ? 'warning' : 'info', 
+                currentAmount < target ? `Target not fully met. Shortfall: RM ${(target - currentAmount).toFixed(2)}.` : `Allocation complete! Total: RM ${currentAmount.toFixed(2)}`
+            );
             saveData();
             renderSites();
             updateSummary();
@@ -483,15 +461,14 @@
             const site = sites.find(s => s.id === siteId); if (!site) return;
             const date = new Date(dateStr);
             let dayAlloc = site.allocation.find(a => a.date.getTime() === date.getTime());
-            if (!dayAlloc && trips > 0) {
-                dayAlloc = { date: date, trips: 0 };
-                site.allocation.push(dayAlloc);
-            }
+            const numTrips = Math.max(0, parseInt(trips) || 0);
             if (dayAlloc) {
-                dayAlloc.trips = Math.max(0, parseInt(trips) || 0);
-                if (dayAlloc.trips === 0) {
-                    site.allocation = site.allocation.filter(a => a.date.getTime() !== date.getTime());
-                }
+                dayAlloc.trips = numTrips;
+            } else if (numTrips > 0) {
+                site.allocation.push({ date: date, trips: numTrips });
+            }
+            if (dayAlloc && dayAlloc.trips === 0) {
+                site.allocation = site.allocation.filter(a => a.date.getTime() !== date.getTime());
             }
             saveData();
             updateSummary();
@@ -505,9 +482,7 @@
 
         function renderSites() {
             const container = document.getElementById('sitesList');
-            if (sites.length === 0) {
-                container.innerHTML = '<div class="alert alert-info">No sites added yet.</div>'; return;
-            }
+            if (sites.length === 0) { container.innerHTML = '<div class="alert alert-info">No sites added yet.</div>'; return; }
             const days = getDaysInRange();
             container.innerHTML = sites.map(site => `
                 <div class="site-card">
@@ -535,10 +510,7 @@
         function updateSummary() {
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
             const target = parseFloat(document.getElementById('targetAmount').value) || 0;
-            let totalDistance = 0;
-            sites.forEach(site => {
-                site.allocation.forEach(alloc => { totalDistance += site.distance * alloc.trips; });
-            });
+            const totalDistance = sites.reduce((sum, site) => sum + site.allocation.reduce((siteSum, alloc) => siteSum + site.distance * alloc.trips, 0), 0);
             const totalAmount = totalDistance * rate;
             const progress = target > 0 ? Math.min((totalAmount / target) * 100, 100) : 0;
             document.getElementById('totalDistance').textContent = `${totalDistance.toFixed(2)} km`;
@@ -556,70 +528,45 @@
             config.includeSaturday = document.getElementById('includeSaturday').checked;
             config.includeSunday = document.getElementById('includeSunday').checked;
             saveData();
-            renderSites();
-            updateSummary();
         }
 
         function toggleTheme() {
             const theme = document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', theme);
-            localStorage.setItem('theme', theme); // Keep theme preference in localStorage
+            localStorage.setItem('theme', theme);
         }
 
         function loadTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
         }
-
-        // ===================================================================
-        // ===== FIREBASE DATA FUNCTIONS (REPLACING LOCALSTORAGE) ======
-        // ===================================================================
 
         function saveData() {
             if (!window.firebaseDb) return console.error("Firebase is not initialized.");
             const dbRef = window.firebaseDb.ref(window.firebaseDb.database, 'mileageData');
             const dataToSave = {
-                sites: sites.map(site => ({
-                    ...site,
-                    allocation: site.allocation.map(alloc => ({ ...alloc, date: alloc.date.toISOString() }))
-                })),
-                config: {
-                    ...config,
-                    dateRange: {
-                        start: config.dateRange.start ? config.dateRange.start.toISOString() : null,
-                        end: config.dateRange.end ? config.dateRange.end.toISOString() : null,
-                    }
-                }
+                sites: sites.map(site => ({ ...site, allocation: site.allocation.map(alloc => ({ ...alloc, date: alloc.date.toISOString() })) })),
+                config: { ...config, dateRange: { start: config.dateRange.start?.toISOString() || null, end: config.dateRange.end?.toISOString() || null } }
             };
             window.firebaseDb.set(dbRef).catch(error => console.error("Firebase save error:", error));
         }
 
-        function loadData() {
+        window.loadData = function() {
             if (!window.firebaseDb) return console.error("Firebase is not initialized.");
             const dbRef = window.firebaseDb.ref(window.firebaseDb.database, 'mileageData');
             window.firebaseDb.onValue(dbRef, (snapshot) => {
                 const data = snapshot.val();
                 if (data) {
                     config = data.config || {};
-                    if (config.dateRange && config.dateRange.start) config.dateRange.start = new Date(config.dateRange.start);
-                    if (config.dateRange && config.dateRange.end) config.dateRange.end = new Date(config.dateRange.end);
-                    
-                    sites = (data.sites || []).map(site => ({
-                        ...site,
-                        allocation: (site.allocation || []).map(alloc => ({ ...alloc, date: new Date(alloc.date) }))
-                    }));
-
+                    if (config.dateRange?.start) config.dateRange.start = new Date(config.dateRange.start);
+                    if (config.dateRange?.end) config.dateRange.end = new Date(config.dateRange.end);
+                    sites = (data.sites || []).map(site => ({ ...site, allocation: (site.allocation || []).map(alloc => ({ ...alloc, date: new Date(alloc.date) })) }));
                     document.getElementById('startPoint').value = config.startPoint || '';
                     document.getElementById('mileageRate').value = config.mileageRate || 0.80;
                     document.getElementById('targetAmount').value = config.targetAmount || 0;
                     document.getElementById('includeSaturday').checked = config.includeSaturday || false;
                     document.getElementById('includeSunday').checked = config.includeSunday || false;
-
                     const fp = document.getElementById('dateRange')._flatpickr;
-                    if (fp && config.dateRange && config.dateRange.start && config.dateRange.end) {
-                        fp.setDate([config.dateRange.start, config.dateRange.end], false);
-                    }
-                    
+                    if (fp && config.dateRange?.start) fp.setDate([config.dateRange.start, config.dateRange.end], false);
                     renderSites();
                     updateSummary();
                 }
