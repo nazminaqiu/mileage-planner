@@ -971,7 +971,7 @@
             return days;
         }
 
-        // MODIFIED: This is the new, fair, round-robin allocation logic
+        // MODIFIED: This is the new, fair, multi-pass allocation logic
         async function autoAllocate() {
             if (sites.length === 0) return alert('Please add at least one site.');
             if (!config.dateRange.start) return alert('Please select a date range.');
@@ -988,19 +988,46 @@
             let currentAmount = 0;
             const maxTripsPerDay = 3;
 
-            const longTripSites = sites.filter(s => s.distance > 100).sort((a, b) => b.distance - a.distance);
-            const shortTripSites = sites.filter(s => s.distance <= 100).sort((a, b) => b.distance - a.distance);
+            // Sort all sites by distance
+            const allSitesSorted = [...sites].sort((a, b) => b.distance - a.distance);
 
             const dayUsage = new Map();
             days.forEach(day => dayUsage.set(day.getTime(), 0));
+            let dayIndex = 0;
 
-            // --- PHASE 1: Round-robin allocation for short trips ---
-            if (shortTripSites.length > 0) {
+            // --- PASS 1: Give every site one trip (breadth-first) ---
+            for (const site of allSitesSorted) {
+                if (currentAmount >= target) break;
+
+                let allocated = false;
+                let searchIndex = 0;
+                while (!allocated && searchIndex < days.length) {
+                    const day = days[(dayIndex + searchIndex) % days.length];
+                    const dayTs = day.getTime();
+                    const isLongTrip = site.distance > 100;
+                    
+                    const canAllocate = isLongTrip 
+                        ? (dayUsage.get(dayTs) === 0) 
+                        : (dayUsage.get(dayTs) < maxTripsPerDay);
+
+                    if (canAllocate) {
+                        site.allocation.push({ date: day, trips: 1 });
+                        dayUsage.set(dayTs, dayUsage.get(dayTs) + (isLongTrip ? maxTripsPerDay : 1));
+                        currentAmount += site.distance * rate;
+                        allocated = true;
+                        dayIndex++;
+                    }
+                    searchIndex++;
+                }
+            }
+
+            // --- PASS 2: Top-up with a greedy round-robin if target not met ---
+            if (currentAmount < target) {
                 let tripCounter = 0;
-                const safetyLimit = days.length * shortTripSites.length * maxTripsPerDay;
+                const safetyLimit = days.length * allSitesSorted.length * maxTripsPerDay;
                 while (currentAmount < target && tripCounter < safetyLimit) {
-                    const site = shortTripSites[tripCounter % shortTripSites.length];
-                    const day = days[Math.floor(tripCounter / shortTripSites.length) % days.length];
+                    const site = allSitesSorted[tripCounter % allSitesSorted.length];
+                    const day = days[Math.floor(tripCounter / allSitesSorted.length) % days.length];
                     const dayTs = day.getTime();
                     tripCounter++;
                     
@@ -1020,22 +1047,6 @@
                 }
             }
             
-            // --- PHASE 2: Fill empty days with long trips ---
-            if (currentAmount < target) {
-                const emptyDays = days.filter(day => dayUsage.get(day.getTime()) === 0);
-                let emptyDayIndex = 0;
-                for (const site of longTripSites) {
-                    if (currentAmount >= target || emptyDayIndex >= emptyDays.length) break;
-                    const totalTripsForSite = site.allocation.reduce((sum, a) => sum + a.trips, 0);
-                    if (site.isSingleTrip && totalTripsForSite >= 1) continue;
-                    
-                    const day = emptyDays[emptyDayIndex];
-                    site.allocation.push({ date: day, trips: 1 });
-                    currentAmount += site.distance * rate;
-                    emptyDayIndex++;
-                }
-            }
-
             const batch = writeBatch(db);
             sites.forEach(site => batch.set(doc(db, 'sites', String(site.id)), toFirestore(site)));
             await batch.commit();
@@ -1152,7 +1163,7 @@
             document.body.removeChild(link);
         }
 
-        // MODIFIED: This is the new, fair distribution logic for "Meet Target"
+        // MODIFIED: New fair distribution logic for "Meet Target"
         async function meetTarget() {
             const targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
@@ -1166,7 +1177,6 @@
             
             const shortfallDistance = shortfallAmount / rate;
 
-            // Find all eligible candidate sites for adjustment
             const candidateSites = sites.filter(site => 
                 !site.isSingleTrip && 
                 site.distance <= 100 &&
@@ -1177,7 +1187,6 @@
                 return alert("Optimization failed: No suitable sites found for adjustment (must be a non-single, short-distance site with at least one trip).");
             }
             
-            // Calculate total number of trips across all candidate sites
             const totalTripsAcrossCandidates = candidateSites.reduce((sum, site) => 
                 sum + site.allocation.reduce((siteSum, alloc) => siteSum + alloc.trips, 0), 0
             );
@@ -1186,15 +1195,10 @@
                  return alert("Optimization failed: No trips allocated to suitable sites.");
             }
 
-            // Calculate the small amount of distance to add per trip
             const distanceToAddPerTrip = shortfallDistance / totalTripsAcrossCandidates;
 
-            // Apply the adjustment to all candidate sites
             const batch = writeBatch(db);
             candidateSites.forEach(site => {
-                const totalTripsForSite = site.allocation.reduce((sum, a) => sum + a.trips, 0);
-                site.distance += (distanceToAddPerTrip * totalTripsForSite); // This line had a small bug, fixed to just add distance per trip
-                // Correct logic: Just add the per-trip amount to the base distance
                 site.distance += distanceToAddPerTrip; 
                 site.isAdjusted = true;
                 batch.set(doc(db, 'sites', String(site.id)), toFirestore(site));
@@ -1273,7 +1277,7 @@
             else progressBar.style.background = 'var(--accent-color)';
 
             const meetTargetBtn = document.getElementById('meetTargetBtn');
-            if (target > 0 && totalAmount < target) {
+            if (target > 0 && totalAmount > 0 && totalAmount < target) {
                 meetTargetBtn.disabled = false;
             } else {
                 meetTargetBtn.disabled = true;
