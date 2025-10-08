@@ -1,0 +1,1207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mileage Claim Planner</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f8f9fa;
+            --bg-tertiary: #e9ecef;
+            --text-primary: #212529;
+            --text-secondary: #6c757d;
+            --border-color: #dee2e6;
+            --accent-color: #0d6efd;
+            --accent-hover: #0b5ed7;
+            --success-color: #198754;
+            --warning-color: #ffc107;
+            --danger-color: #dc3545;
+            --shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1a1a1a;
+            --bg-secondary: #2d2d2d;
+            --bg-tertiary: #3a3a3a;
+            --text-primary: #e9ecef;
+            --text-secondary: #adb5bd;
+            --border-color: #495057;
+            --shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background-color 0.3s, color 0.3s;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .header {
+            background: var(--bg-primary);
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: none;
+            padding: 8px 16px;
+            border-radius: 8px;
+            cursor: pointer;
+            color: var(--text-primary);
+            font-size: 14px;
+            transition: background-color 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--border-color);
+        }
+
+        .section {
+            background: var(--bg-primary);
+            padding: 24px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+        }
+
+        .section-title {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .status-success {
+            background: rgba(25, 135, 84, 0.1);
+            color: var(--success-color);
+        }
+
+        .status-error {
+            background: rgba(220, 53, 69, 0.1);
+            color: var(--danger-color);
+        }
+
+        .status-warning {
+            background: rgba(255, 193, 7, 0.1);
+            color: var(--warning-color);
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: var(--text-primary);
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 14px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            transition: border-color 0.2s;
+        }
+
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--accent-color);
+        }
+
+        .input-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+        }
+
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #157347;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #bb2d3b;
+        }
+
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 16px;
+            flex-wrap: wrap;
+        }
+
+        .site-card {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 16px;
+            margin-bottom: 12px;
+        }
+
+        .site-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 12px;
+        }
+
+        .site-info {
+            flex: 1;
+        }
+
+        .site-name {
+            font-weight: 600;
+            font-size: 16px;
+            margin-bottom: 4px;
+        }
+
+        .site-address {
+            font-size: 13px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .site-distance {
+            font-size: 14px;
+            color: var(--accent-color);
+            font-weight: 500;
+        }
+
+        .allocation-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 8px;
+            margin-top: 12px;
+        }
+
+        .day-allocation {
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            padding: 8px;
+            text-align: center;
+        }
+
+        .day-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .trip-input {
+            width: 100%;
+            padding: 6px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 16px;
+        }
+
+        .summary-card {
+            background: var(--bg-secondary);
+            padding: 16px;
+            border-radius: 8px;
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .summary-label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 4px;
+        }
+
+        .summary-value {
+            font-size: 24px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 8px;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--success-color);
+            transition: width 0.3s;
+        }
+
+        .alert {
+            padding: 12px 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-size: 14px;
+        }
+
+        .alert-info {
+            background: rgba(13, 110, 253, 0.1);
+            color: var(--accent-color);
+            border-left: 4px solid var(--accent-color);
+        }
+
+        .alert-warning {
+            background: rgba(255, 193, 7, 0.1);
+            color: var(--warning-color);
+            border-left: 4px solid var(--warning-color);
+        }
+
+        .alert-danger {
+            background: rgba(220, 53, 69, 0.1);
+            color: var(--danger-color);
+            border-left: 4px solid var(--danger-color);
+        }
+
+        .loading {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--bg-tertiary);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .autocomplete-dropdown {
+            position: absolute;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow);
+            max-height: 200px;
+            overflow-y: auto;
+            z-index: 1000;
+            width: 100%;
+            margin-top: 4px;
+        }
+
+        .autocomplete-item {
+            padding: 10px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .autocomplete-item:hover {
+            background: var(--bg-secondary);
+        }
+
+        .autocomplete-item:last-child {
+            border-bottom: none;
+        }
+
+        .checkbox-group {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .checkbox-label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+        }
+
+        input[type="checkbox"] {
+            width: auto;
+            cursor: pointer;
+        }
+
+        .position-relative {
+            position: relative;
+        }
+
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 12px;
+            }
+
+            .input-group {
+                grid-template-columns: 1fr;
+            }
+
+            .allocation-grid {
+                grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 Mileage Claim Planner</h1>
+            <button class="theme-toggle" onclick="toggleTheme()">🌙 Toggle Theme</button>
+        </div>
+
+        <!-- API Status -->
+        <div id="apiStatus" class="section">
+            <div class="section-title">
+                API Status
+                <span id="apiStatusBadge" class="status-badge">Waiting for API Key</span>
+            </div>
+            <div id="apiKeyInput" style="display: block;">
+                <div class="alert alert-info">
+                    Please enter your Google Maps API Key to get started. Your key will be saved securely in your browser.
+                </div>
+                <div class="form-group">
+                    <label>Google Maps API Key</label>
+                    <input type="text" id="apiKeyField" placeholder="Enter your API key here">
+                </div>
+                <button class="btn btn-primary" onclick="validateAndSaveAPIKey()">🔑 Validate & Save API Key</button>
+                <button class="btn btn-secondary" onclick="showAPIKeyHelp()">❓ How to get API Key</button>
+            </div>
+            <div id="apiMessage" class="alert alert-info" style="display: none;">
+                Validating Google Maps API...
+            </div>
+        </div>
+
+        <!-- Configuration -->
+        <div class="section">
+            <div class="section-title">⚙️ Configuration</div>
+            
+            <div class="form-group position-relative">
+                <label>Start Point (Main Office)</label>
+                <input type="text" id="startPoint" placeholder="Enter your office address or use GPS">
+                <div id="startPointDropdown" class="autocomplete-dropdown" style="display: none;"></div>
+            </div>
+            
+            <div class="btn-group">
+                <button class="btn btn-secondary" onclick="useCurrentLocation()">📍 Use Current GPS Location</button>
+            </div>
+
+            <div class="input-group">
+                <div class="form-group">
+                    <label>Mileage Rate (RM/km)</label>
+                    <input type="number" id="mileageRate" value="0.80" step="0.01" min="0">
+                </div>
+                <div class="form-group">
+                    <label>Target Amount (RM)</label>
+                    <input type="number" id="targetAmount" value="0" step="0.01" min="0">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Date Range</label>
+                <input type="text" id="dateRange" placeholder="Select date range">
+            </div>
+
+            <div class="form-group">
+                <label>Include Weekends</label>
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="includeSaturday">
+                        <span>Saturday</span>
+                    </label>
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="includeSunday">
+                        <span>Sunday</span>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Site -->
+        <div class="section">
+            <div class="section-title">📍 Add Project Site</div>
+            
+            <div class="form-group">
+                <label>Site Name</label>
+                <input type="text" id="siteName" placeholder="e.g., Project Site A">
+            </div>
+
+            <div class="form-group position-relative">
+                <label>Site Address</label>
+                <input type="text" id="siteAddress" placeholder="Start typing to search...">
+                <div id="siteAddressDropdown" class="autocomplete-dropdown" style="display: none;"></div>
+            </div>
+
+            <button class="btn btn-primary" onclick="addSite()">➕ Add Site</button>
+        </div>
+
+        <!-- Sites List -->
+        <div class="section">
+            <div class="section-title">📋 Project Sites</div>
+            <div id="sitesList"></div>
+        </div>
+
+        <!-- Allocation -->
+        <div class="section">
+            <div class="section-title">🎯 Smart Allocation</div>
+            <div id="allocationAlert"></div>
+            <button class="btn btn-success" onclick="autoAllocate()">✨ Auto Allocate</button>
+            <button class="btn btn-secondary" onclick="clearAllocation()">🗑️ Clear All</button>
+        </div>
+
+        <!-- Summary -->
+        <div class="section">
+            <div class="section-title">📊 Summary</div>
+            <div class="summary-grid">
+                <div class="summary-card">
+                    <div class="summary-label">Total Distance</div>
+                    <div class="summary-value" id="totalDistance">0 km</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Total Amount</div>
+                    <div class="summary-value" id="totalAmount">RM 0.00</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Target Amount</div>
+                    <div class="summary-value" id="targetDisplay">RM 0.00</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-label">Progress</div>
+                    <div class="summary-value" id="progressPercent">0%</div>
+                    <div class="progress-bar">
+                        <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script>
+        // Global variables
+        let map, directionsService, autocompleteService, placesService;
+        let sites = [];
+        let config = {
+            startPoint: '',
+            startPointCoords: null,
+            mileageRate: 0.80,
+            targetAmount: 0,
+            dateRange: { start: null, end: null },
+            includeSaturday: false,
+            includeSunday: false
+        };
+        let apiKey = ''; // User will insert their API key
+        let apiValidated = false;
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            loadTheme();
+            loadData();
+            initializeFlatpickr();
+            setupEventListeners();
+            checkForAPIKey();
+        });
+
+        function checkForAPIKey() {
+            const savedKey = localStorage.getItem('googleMapsApiKey');
+            if (savedKey) {
+                apiKey = savedKey;
+                document.getElementById('apiKeyInput').style.display = 'none';
+                document.getElementById('apiMessage').style.display = 'block';
+                loadGoogleMapsAPI();
+            } else {
+                // Show API key input form
+                document.getElementById('apiKeyInput').style.display = 'block';
+                document.getElementById('apiMessage').style.display = 'none';
+            }
+        }
+
+        function validateAndSaveAPIKey() {
+            const keyInput = document.getElementById('apiKeyField').value.trim();
+            
+            if (!keyInput) {
+                alert('Please enter an API key');
+                return;
+            }
+
+            apiKey = keyInput;
+            localStorage.setItem('googleMapsApiKey', apiKey);
+            
+            document.getElementById('apiKeyInput').style.display = 'none';
+            document.getElementById('apiMessage').style.display = 'block';
+            
+            loadGoogleMapsAPI();
+        }
+
+        function showAPIKeyHelp() {
+            const helpText = `How to get Google Maps API Key:
+
+1. Go to Google Cloud Console: https://console.cloud.google.com/
+2. Create a new project or select existing one
+3. Enable these APIs:
+   - Maps JavaScript API
+   - Places API
+   - Directions API
+   - Geocoding API
+4. Go to "Credentials" and create an API Key
+5. Copy the API key and paste it above
+
+Note: You may need to set up billing, but Google provides $200 free credit monthly.`;
+            
+            alert(helpText);
+        }
+
+        function loadGoogleMapsAPI() {
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initMap`;
+            script.async = true;
+            script.defer = true;
+            script.onerror = () => updateAPIStatus(false, 'Failed to load Google Maps API. Check your API key and internet connection.');
+            document.head.appendChild(script);
+        }
+
+        function initMap() {
+            try {
+                directionsService = new google.maps.DirectionsService();
+                autocompleteService = new google.maps.places.AutocompleteService();
+                
+                // Create a temporary div for PlacesService
+                const tempDiv = document.createElement('div');
+                placesService = new google.maps.places.PlacesService(tempDiv);
+                
+                apiValidated = true;
+                updateAPIStatus(true, 'Google Maps API validated successfully!');
+            } catch (error) {
+                apiValidated = false;
+                updateAPIStatus(false, `API validation failed: ${error.message}`);
+            }
+        }
+
+        function updateAPIStatus(success, message) {
+            const badge = document.getElementById('apiStatusBadge');
+            const messageEl = document.getElementById('apiMessage');
+            
+            if (success) {
+                badge.className = 'status-badge status-success';
+                badge.textContent = 'Connected';
+                messageEl.className = 'alert alert-info';
+            } else {
+                badge.className = 'status-badge status-error';
+                badge.textContent = 'Error';
+                messageEl.className = 'alert alert-danger';
+            }
+            messageEl.textContent = message;
+        }
+
+        function setupEventListeners() {
+            document.getElementById('startPoint').addEventListener('input', handleStartPointInput);
+            document.getElementById('siteAddress').addEventListener('input', handleSiteAddressInput);
+            document.getElementById('mileageRate').addEventListener('change', saveConfig);
+            document.getElementById('targetAmount').addEventListener('change', saveConfig);
+            document.getElementById('includeSaturday').addEventListener('change', saveConfig);
+            document.getElementById('includeSunday').addEventListener('change', saveConfig);
+
+            // Auto-save on input
+            document.getElementById('mileageRate').addEventListener('input', updateSummary);
+            document.getElementById('targetAmount').addEventListener('input', updateSummary);
+        }
+
+        function initializeFlatpickr() {
+            // Wait for flatpickr to be fully loaded
+            if (typeof flatpickr === 'undefined') {
+                setTimeout(initializeFlatpickr, 100);
+                return;
+            }
+
+            const dateInput = document.getElementById('dateRange');
+            if (!dateInput) {
+                setTimeout(initializeFlatpickr, 100);
+                return;
+            }
+
+            try {
+                const fp = flatpickr(dateInput, {
+                    mode: 'range',
+                    dateFormat: 'Y-m-d',
+                    allowInput: false,
+                    clickOpens: true,
+                    disableMobile: false,
+                    onChange: function(selectedDates) {
+                        if (selectedDates.length === 2) {
+                            config.dateRange.start = new Date(selectedDates[0]);
+                            config.dateRange.end = new Date(selectedDates[1]);
+                            saveConfig();
+                            renderSites();
+                            updateSummary();
+                        }
+                    },
+                    onReady: function(selectedDates, dateStr, instance) {
+                        console.log('Flatpickr ready');
+                    }
+                });
+
+                // Store flatpickr instance for later use
+                dateInput._flatpickr = fp;
+            } catch (error) {
+                console.error('Flatpickr initialization error:', error);
+                // Fallback: try again after a delay
+                setTimeout(initializeFlatpickr, 500);
+            }
+        }
+
+        function handleStartPointInput(e) {
+            const value = e.target.value;
+            if (value.length < 3 || !apiValidated) return;
+
+            autocompleteService.getPlacePredictions(
+                { input: value },
+                (predictions, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        showAutocomplete('startPointDropdown', predictions, selectStartPoint);
+                    }
+                }
+            );
+        }
+
+        function handleSiteAddressInput(e) {
+            const value = e.target.value;
+            if (value.length < 3 || !apiValidated) return;
+
+            autocompleteService.getPlacePredictions(
+                { input: value },
+                (predictions, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        showAutocomplete('siteAddressDropdown', predictions, selectSiteAddress);
+                    }
+                }
+            );
+        }
+
+        function showAutocomplete(dropdownId, predictions, callback) {
+            const dropdown = document.getElementById(dropdownId);
+            dropdown.innerHTML = '';
+            dropdown.style.display = 'block';
+
+            predictions.forEach(prediction => {
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item';
+                item.textContent = prediction.description;
+                item.onclick = () => callback(prediction);
+                dropdown.appendChild(item);
+            });
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function closeDropdown(e) {
+                if (!dropdown.contains(e.target)) {
+                    dropdown.style.display = 'none';
+                    document.removeEventListener('click', closeDropdown);
+                }
+            });
+        }
+
+        function selectStartPoint(prediction) {
+            document.getElementById('startPoint').value = prediction.description;
+            document.getElementById('startPointDropdown').style.display = 'none';
+            
+            placesService.getDetails(
+                { placeId: prediction.place_id },
+                (place, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK) {
+                        config.startPoint = prediction.description;
+                        config.startPointCoords = {
+                            lat: place.geometry.location.lat(),
+                            lng: place.geometry.location.lng()
+                        };
+                        saveConfig();
+                        recalculateAllDistances();
+                    }
+                }
+            );
+        }
+
+        function selectSiteAddress(prediction) {
+            document.getElementById('siteAddress').value = prediction.description;
+            document.getElementById('siteAddressDropdown').style.display = 'none';
+        }
+
+        function useCurrentLocation() {
+            if (!navigator.geolocation) {
+                alert('Geolocation is not supported by your browser');
+                return;
+            }
+
+            navigator.geolocation.getCurrentPosition(
+                (position) => {
+                    const coords = {
+                        lat: position.coords.latitude,
+                        lng: position.coords.longitude
+                    };
+                    
+                    const geocoder = new google.maps.Geocoder();
+                    geocoder.geocode({ location: coords }, (results, status) => {
+                        if (status === 'OK' && results[0]) {
+                            document.getElementById('startPoint').value = results[0].formatted_address;
+                            config.startPoint = results[0].formatted_address;
+                            config.startPointCoords = coords;
+                            saveConfig();
+                            recalculateAllDistances();
+                        }
+                    });
+                },
+                (error) => {
+                    alert('Error getting location: ' + error.message);
+                }
+            );
+        }
+
+        function addSite() {
+            if (!apiValidated) {
+                alert('Please wait for API validation to complete');
+                return;
+            }
+
+            const name = document.getElementById('siteName').value.trim();
+            const address = document.getElementById('siteAddress').value.trim();
+
+            if (!name || !address) {
+                alert('Please enter both site name and address');
+                return;
+            }
+
+            if (!config.startPoint) {
+                alert('Please set your start point first');
+                return;
+            }
+
+            const site = {
+                id: Date.now(),
+                name: name,
+                address: address,
+                distance: 0,
+                allocation: []
+            };
+
+            sites.push(site);
+            calculateDistance(site);
+            
+            document.getElementById('siteName').value = '';
+            document.getElementById('siteAddress').value = '';
+            
+            saveData();
+            renderSites();
+        }
+
+        function calculateDistance(site) {
+            if (!config.startPointCoords) {
+                alert('Start point coordinates not available. Please select start point again.');
+                return;
+            }
+
+            // Get coordinates for destination
+            placesService.findPlaceFromQuery(
+                { query: site.address, fields: ['geometry'] },
+                (results, status) => {
+                    if (status === google.maps.places.PlacesServiceStatus.OK && results[0]) {
+                        const destination = results[0].geometry.location;
+                        
+                        // Calculate round-trip using real route
+                        directionsService.route(
+                            {
+                                origin: new google.maps.LatLng(config.startPointCoords.lat, config.startPointCoords.lng),
+                                destination: destination,
+                                travelMode: google.maps.TravelMode.DRIVING
+                            },
+                            (result, status) => {
+                                if (status === google.maps.DirectionsStatus.OK) {
+                                    const distance = result.routes[0].legs[0].distance.value / 1000; // Convert to km
+                                    site.distance = Math.round(distance * 2 * 100) / 100; // Round-trip
+                                    saveData();
+                                    renderSites();
+                                    updateSummary();
+                                }
+                            }
+                        );
+                    }
+                }
+            );
+        }
+
+        function recalculateAllDistances() {
+            sites.forEach(site => calculateDistance(site));
+        }
+
+        function removeSite(siteId) {
+            if (confirm('Are you sure you want to remove this site?')) {
+                sites = sites.filter(s => s.id !== siteId);
+                saveData();
+                renderSites();
+                updateSummary();
+            }
+        }
+
+        function getDaysInRange() {
+            if (!config.dateRange.start || !config.dateRange.end) return [];
+            
+            const days = [];
+            const current = new Date(config.dateRange.start);
+            const end = new Date(config.dateRange.end);
+            
+            while (current <= end) {
+                const dayOfWeek = current.getDay();
+                const isSaturday = dayOfWeek === 6;
+                const isSunday = dayOfWeek === 0;
+                
+                if ((!isSaturday && !isSunday) || 
+                    (isSaturday && config.includeSaturday) || 
+                    (isSunday && config.includeSunday)) {
+                    days.push(new Date(current));
+                }
+                current.setDate(current.getDate() + 1);
+            }
+            
+            return days;
+        }
+
+        function autoAllocate() {
+            if (sites.length === 0) {
+                alert('Please add at least one site first');
+                return;
+            }
+
+            if (!config.dateRange.start || !config.dateRange.end) {
+                alert('Please select a date range first');
+                return;
+            }
+
+            const target = parseFloat(document.getElementById('targetAmount').value) || 0;
+            const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
+            
+            if (target <= 0) {
+                alert('Please set a target amount greater than 0');
+                return;
+            }
+
+            const days = getDaysInRange();
+            if (days.length === 0) {
+                alert('No available days in the selected range');
+                return;
+            }
+
+            // Clear existing allocation
+            sites.forEach(site => site.allocation = []);
+
+            // Smart allocation algorithm
+            // Strategy: Distribute trips to maximize efficiency
+            // Prioritize farther sites (better value per trip)
+            const sortedSites = [...sites].sort((a, b) => b.distance - a.distance);
+            
+            let currentAmount = 0;
+            let dayIndex = 0;
+            const maxTripsPerDay = 3; // Safety limit
+
+            while (currentAmount < target && dayIndex < days.length * maxTripsPerDay * sites.length) {
+                for (let site of sortedSites) {
+                    if (currentAmount >= target) break;
+                    
+                    const dayIdx = dayIndex % days.length;
+                    const day = days[dayIdx];
+                    
+                    // Check if this site already has allocation for this day
+                    let dayAlloc = site.allocation.find(a => a.date.getTime() === day.getTime());
+                    
+                    if (!dayAlloc) {
+                        dayAlloc = { date: new Date(day), trips: 0 };
+                        site.allocation.push(dayAlloc);
+                    }
+                    
+                    if (dayAlloc.trips < maxTripsPerDay) {
+                        dayAlloc.trips++;
+                        currentAmount += site.distance * rate;
+                    }
+                    
+                    dayIndex++;
+                }
+            }
+
+            if (currentAmount < target) {
+                const shortfall = target - currentAmount;
+                showAllocationAlert('warning', 
+                    `Target not fully met. Shortfall: RM ${shortfall.toFixed(2)}. ` +
+                    `Consider: 1) Adding more sites, 2) Extending date range, 3) Including weekends, or 4) Manually adding trips.`
+                );
+            } else {
+                showAllocationAlert('info', 
+                    `Allocation complete! Total: RM ${currentAmount.toFixed(2)} (${((currentAmount/target)*100).toFixed(1)}% of target)`
+                );
+            }
+
+            saveData();
+            renderSites();
+            updateSummary();
+        }
+
+        function clearAllocation() {
+            if (confirm('Clear all trip allocations?')) {
+                sites.forEach(site => site.allocation = []);
+                saveData();
+                renderSites();
+                updateSummary();
+            }
+        }
+
+        function updateTrips(siteId, dateStr, trips) {
+            const site = sites.find(s => s.id === siteId);
+            if (!site) return;
+
+            const date = new Date(dateStr);
+            let dayAlloc = site.allocation.find(a => a.date.getTime() === date.getTime());
+            
+            if (!dayAlloc && trips > 0) {
+                dayAlloc = { date: date, trips: 0 };
+                site.allocation.push(dayAlloc);
+            }
+            
+            if (dayAlloc) {
+                dayAlloc.trips = Math.max(0, parseInt(trips) || 0);
+                if (dayAlloc.trips === 0) {
+                    site.allocation = site.allocation.filter(a => a.date.getTime() !== date.getTime());
+                }
+            }
+
+            saveData();
+            updateSummary();
+        }
+
+        function showAllocationAlert(type, message) {
+            const alertDiv = document.getElementById('allocationAlert');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.textContent = message;
+            alertDiv.style.display = 'block';
+        }
+
+        function renderSites() {
+            const container = document.getElementById('sitesList');
+            
+            if (sites.length === 0) {
+                container.innerHTML = '<div class="alert alert-info">No sites added yet. Add your first project site above.</div>';
+                return;
+            }
+
+            const days = getDaysInRange();
+            
+            container.innerHTML = sites.map(site => `
+                <div class="site-card">
+                    <div class="site-header">
+                        <div class="site-info">
+                            <div class="site-name">${site.name}</div>
+                            <div class="site-address">${site.address}</div>
+                            <div class="site-distance">
+                                ${site.distance > 0 ? `${site.distance} km (round-trip)` : 'Calculating...'}
+                            </div>
+                        </div>
+                        <button class="btn btn-danger" onclick="removeSite(${site.id})">✕</button>
+                    </div>
+                    ${days.length > 0 ? `
+                        <div class="allocation-grid">
+                            ${days.map(day => {
+                                const dateStr = day.toISOString().split('T')[0];
+                                const dayName = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+                                const alloc = site.allocation.find(a => a.date.toISOString().split('T')[0] === dateStr);
+                                const trips = alloc ? alloc.trips : 0;
+                                
+                                return `
+                                    <div class="day-allocation">
+                                        <div class="day-label">${dayName}</div>
+                                        <input type="number" class="trip-input" 
+                                               value="${trips}" 
+                                               min="0" 
+                                               max="10"
+                                               onchange="updateTrips(${site.id}, '${dateStr}', this.value)">
+                                    </div>
+                                `;
+                            }).join('')}
+                        </div>
+                    ` : '<div class="alert alert-warning">Select a date range to allocate trips</div>'}
+                </div>
+            `).join('');
+        }
+
+        function updateSummary() {
+            const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
+            const target = parseFloat(document.getElementById('targetAmount').value) || 0;
+            
+            let totalDistance = 0;
+            sites.forEach(site => {
+                site.allocation.forEach(alloc => {
+                    totalDistance += site.distance * alloc.trips;
+                });
+            });
+            
+            const totalAmount = totalDistance * rate;
+            const progress = target > 0 ? Math.min((totalAmount / target) * 100, 100) : 0;
+            
+            document.getElementById('totalDistance').textContent = `${totalDistance.toFixed(2)} km`;
+            document.getElementById('totalAmount').textContent = `RM ${totalAmount.toFixed(2)}`;
+            document.getElementById('targetDisplay').textContent = `RM ${target.toFixed(2)}`;
+            document.getElementById('progressPercent').textContent = `${progress.toFixed(1)}%`;
+            document.getElementById('progressBar').style.width = `${progress}%`;
+            
+            // Update progress bar color
+            const progressBar = document.getElementById('progressBar');
+            if (progress >= 100) {
+                progressBar.style.background = 'var(--success-color)';
+            } else if (progress >= 75) {
+                progressBar.style.background = 'var(--warning-color)';
+            } else {
+                progressBar.style.background = 'var(--accent-color)';
+            }
+        }
+
+        function saveConfig() {
+            config.mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
+            config.targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
+            config.includeSaturday = document.getElementById('includeSaturday').checked;
+            config.includeSunday = document.getElementById('includeSunday').checked;
+            
+            localStorage.setItem('mileageConfig', JSON.stringify(config));
+            renderSites();
+            updateSummary();
+        }
+
+        function saveData() {
+            localStorage.setItem('mileageSites', JSON.stringify(sites));
+            localStorage.setItem('mileageConfig', JSON.stringify(config));
+        }
+
+        function loadData() {
+            const savedConfig = localStorage.getItem('mileageConfig');
+            if (savedConfig) {
+                config = JSON.parse(savedConfig);
+                
+                // Restore dates
+                if (config.dateRange.start) config.dateRange.start = new Date(config.dateRange.start);
+                if (config.dateRange.end) config.dateRange.end = new Date(config.dateRange.end);
+                
+                document.getElementById('startPoint').value = config.startPoint || '';
+                document.getElementById('mileageRate').value = config.mileageRate;
+                document.getElementById('targetAmount').value = config.targetAmount;
+                document.getElementById('includeSaturday').checked = config.includeSaturday;
+                document.getElementById('includeSunday').checked = config.includeSunday;
+                
+                if (config.dateRange.start && config.dateRange.end) {
+                    const fp = document.getElementById('dateRange')._flatpickr;
+                    if (fp) fp.setDate([config.dateRange.start, config.dateRange.end]);
+                }
+            }
+
+            const savedSites = localStorage.getItem('mileageSites');
+            if (savedSites) {
+                sites = JSON.parse(savedSites);
+                // Restore dates in allocations
+                sites.forEach(site => {
+                    site.allocation = site.allocation.map(a => ({
+                        ...a,
+                        date: new Date(a.date)
+                    }));
+                });
+                renderSites();
+                updateSummary();
+            }
+        }
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', savedTheme);
+        }
+    </script>
+</body>
+</html>
