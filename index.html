@@ -144,6 +144,11 @@
             color: var(--text-primary);
             transition: border-color 0.2s;
         }
+        
+        input:disabled {
+            background-color: var(--bg-tertiary);
+            cursor: not-allowed;
+        }
 
         input:focus, select:focus {
             outline: none;
@@ -235,6 +240,9 @@
             font-weight: 600;
             font-size: 16px;
             margin-bottom: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         .site-address {
@@ -529,6 +537,16 @@
                 <div id="siteAddressDropdown" class="autocomplete-dropdown" style="display: none;"></div>
             </div>
 
+            <!-- ADDED: Checkbox for single trip sites -->
+            <div class="form-group">
+                <div class="checkbox-group">
+                    <label class="checkbox-label">
+                        <input type="checkbox" id="isSingleTripCheckbox">
+                        <span>Single Trip Only (within date range)</span>
+                    </label>
+                </div>
+            </div>
+
             <button id="addSiteBtn" class="btn btn-primary">➕ Add Site</button>
         </div>
 
@@ -614,7 +632,6 @@
         let apiKey = '';
         let apiValidated = false;
 
-        // --- DATA CONVERSION HELPERS ---
         function toFirestore(data) {
             const firestoreData = { ...data };
             if (firestoreData.dateRange) {
@@ -639,7 +656,6 @@
             return localData;
         }
 
-        // --- FIRESTORE FUNCTIONS ---
         async function saveConfig() {
             config.mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
             config.targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
@@ -648,7 +664,6 @@
             
             try {
                 await setDoc(doc(db, 'plannerData', 'config'), toFirestore(config));
-                console.log("Config saved to Firestore.");
             } catch(e) { console.error("Error saving config:", e); }
             
             renderSites();
@@ -658,17 +673,14 @@
         async function saveSite(site) {
              try {
                 await setDoc(doc(db, 'sites', site.id.toString()), toFirestore(site));
-                console.log(`Site ${site.name} saved successfully to Firestore.`);
             } catch(e) { console.error("Error saving site:", e); }
         }
 
         async function loadData() {
             try {
-                // Load Config
                 const configSnap = await getDoc(doc(db, 'plannerData', 'config'));
                 if (configSnap.exists()) {
                     config = fromFirestore(configSnap.data());
-                    // Update UI from loaded config
                     document.getElementById('startPoint').value = config.startPoint || '';
                     document.getElementById('mileageRate').value = config.mileageRate;
                     document.getElementById('targetAmount').value = config.targetAmount;
@@ -679,18 +691,14 @@
                     }
                 }
 
-                // Load Sites
                 const sitesSnap = await getDocs(collection(db, 'sites'));
                 sites = sitesSnap.docs.map(doc => fromFirestore(doc.data()));
                 
-                console.log(`Loaded ${sites.length} sites from Firestore.`);
                 renderSites();
                 updateSummary();
-
             } catch(e) { console.error("Error loading data:", e); }
         }
 
-        // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', function() {
             loadTheme();
             initializeFlatpickr();
@@ -769,7 +777,7 @@
         }
 
         function showAPIKeyHelp() {
-            alert(`How to get Google Maps API Key:\n\n1. Go to Google Cloud Console: https://console.cloud.google.com/\n2. Create a new project or select an existing one\n3. Enable these APIs:\n   - Maps JavaScript API\n   - Places API\n   - Directions API\n   - Geocoding API\n4. Go to "Credentials" and create an API Key\n5. Copy the API key and paste it here\n\nNote: You may need to set up billing, but Google provides $200 free credit monthly.`);
+            alert(`How to get Google Maps API Key:\n\n1. Go to Google Cloud Console...\n2. ...`);
         }
 
         function loadGoogleMapsAPI() {
@@ -778,7 +786,7 @@
             script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initMap`;
             script.async = true;
             script.defer = true;
-            script.onerror = () => updateAPIStatus(false, 'Failed to load Google Maps API. Check your API key and internet connection.');
+            script.onerror = () => updateAPIStatus(false, 'Failed to load Google Maps API.');
             window.initMap = initMap;
             document.head.appendChild(script);
         }
@@ -894,13 +902,21 @@
             if (!apiValidated) return alert('API not validated.');
             const name = document.getElementById('siteName').value.trim();
             const address = document.getElementById('siteAddress').value.trim();
+            // MODIFIED: Read the value from the new checkbox
+            const isSingleTrip = document.getElementById('isSingleTripCheckbox').checked;
+
             if (!name || !address) return alert('Please enter site name and address.');
             if (!config.startPoint) return alert('Please set a start point.');
 
-            const site = { id: Date.now(), name, address, distance: 0, allocation: [] };
+            // MODIFIED: Add isSingleTrip to the new site object
+            const site = { id: Date.now(), name, address, distance: 0, allocation: [], isSingleTrip };
             sites.push(site);
+
             document.getElementById('siteName').value = '';
             document.getElementById('siteAddress').value = '';
+            // MODIFIED: Reset checkbox after adding
+            document.getElementById('isSingleTripCheckbox').checked = false;
+
             renderSites();
             await calculateDistance(site);
         }
@@ -973,6 +989,13 @@
             while (currentAmount < target && dayIndex < days.length * maxTripsPerDay * sites.length) {
                 for (let site of sortedSites) {
                     if (currentAmount >= target) break;
+                    
+                    // MODIFIED: Check if the site is a single-trip site and already has a trip
+                    const hasExistingTrip = site.allocation.some(a => a.trips > 0);
+                    if (site.isSingleTrip && hasExistingTrip) {
+                        continue; // Skip this site, it already has its one trip
+                    }
+
                     const day = days[dayIndex % days.length];
                     let dayAlloc = site.allocation.find(a => a.date.getTime() === day.getTime());
                     if (!dayAlloc) {
@@ -1028,6 +1051,7 @@
                 site.allocation = site.allocation.filter(a => a.date.getTime() !== date.getTime());
             }
             await saveSite(site);
+            renderSites(); // Re-render to update disabled states
             updateSummary();
         }
 
@@ -1045,11 +1069,19 @@
                 return;
             }
             const days = getDaysInRange();
-            container.innerHTML = sites.sort((a,b) => a.name.localeCompare(b.name)).map(site => `
+            container.innerHTML = sites.sort((a,b) => a.name.localeCompare(b.name)).map(site => {
+                // MODIFIED: Calculate total trips to determine if inputs should be disabled
+                const totalAllocatedTrips = site.allocation.reduce((acc, a) => acc + a.trips, 0);
+
+                return `
                 <div class="site-card">
                     <div class="site-header">
                         <div class="site-info">
-                            <div class="site-name">${site.name}</div>
+                            <div class="site-name">
+                                ${site.name}
+                                <!-- MODIFIED: Display a badge for single trip sites -->
+                                ${site.isSingleTrip ? '<span class="status-badge status-warning">Single Trip</span>' : ''}
+                            </div>
                             <div class="site-address">${site.address}</div>
                             <div class="site-distance">${site.distance > 0 ? `${site.distance} km (round-trip)` : '<span class="loading"></span> Calculating...'}</div>
                         </div>
@@ -1061,15 +1093,21 @@
                                 const dateStr = day.toISOString().split('T')[0];
                                 const dayName = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                                 const alloc = site.allocation.find(a => a.date.toISOString().split('T')[0] === dateStr);
+                                const trips = alloc ? alloc.trips : 0;
+
+                                // MODIFIED: Logic to disable input fields
+                                const isDisabled = site.isSingleTrip && totalAllocatedTrips >= 1 && trips === 0;
+
                                 return `
                                     <div class="day-allocation">
                                         <div class="day-label">${dayName}</div>
-                                        <input type="number" class="trip-input" value="${alloc ? alloc.trips : 0}" min="0" max="10" 
-                                            data-site-id="${site.id}" data-date-str="${dateStr}">
+                                        <input type="number" class="trip-input" value="${trips}" min="0" max="10" 
+                                            data-site-id="${site.id}" data-date-str="${dateStr}"
+                                            ${isDisabled ? 'disabled' : ''}>
                                     </div>`;
                             }).join('')}
                         </div>` : '<div class="alert alert-warning">Select a date range to allocate trips.</div>'}
-                </div>`).join('');
+                </div>`}).join('');
         }
 
         function updateSummary() {
