@@ -240,9 +240,6 @@
             font-weight: 600;
             font-size: 16px;
             margin-bottom: 4px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
         }
 
         .site-address {
@@ -537,7 +534,6 @@
                 <div id="siteAddressDropdown" class="autocomplete-dropdown" style="display: none;"></div>
             </div>
 
-            <!-- ADDED: Checkbox for single trip sites -->
             <div class="form-group">
                 <div class="checkbox-group">
                     <label class="checkbox-label">
@@ -592,15 +588,11 @@
     </div>
     
     <script type="module">
-        // Import third-party libraries
         import flatpickr from "https://cdn.jsdelivr.net/npm/flatpickr/+esm";
-        
-        // Import Firebase SDKs
         import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
         import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
         import { getFirestore, doc, setDoc, getDoc, getDocs, collection, deleteDoc, writeBatch } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
 
-        // Your web app's Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCfq5zOyd0nJQ61durfVvvNals789n4-WE",
             authDomain: "mileage-planner.firebaseapp.com",
@@ -612,12 +604,10 @@
             measurementId: "G-6547J3HQ67"
         };
 
-        // Initialize Firebase
         const app = initializeApp(firebaseConfig);
         const analytics = getAnalytics(app);
         const db = getFirestore(app);
 
-        // Global variables
         let directionsService, autocompleteService, placesService;
         let sites = [];
         let config = {
@@ -662,18 +652,16 @@
             config.includeSaturday = document.getElementById('includeSaturday').checked;
             config.includeSunday = document.getElementById('includeSunday').checked;
             
-            try {
-                await setDoc(doc(db, 'plannerData', 'config'), toFirestore(config));
-            } catch(e) { console.error("Error saving config:", e); }
+            try { await setDoc(doc(db, 'plannerData', 'config'), toFirestore(config)); } 
+            catch(e) { console.error("Error saving config:", e); }
             
             renderSites();
             updateSummary();
         }
 
         async function saveSite(site) {
-             try {
-                await setDoc(doc(db, 'sites', site.id.toString()), toFirestore(site));
-            } catch(e) { console.error("Error saving site:", e); }
+             try { await setDoc(doc(db, 'sites', site.id.toString()), toFirestore(site)); } 
+             catch(e) { console.error("Error saving site:", e); }
         }
 
         async function loadData() {
@@ -690,16 +678,14 @@
                         document.getElementById('dateRange')._flatpickr.setDate([config.dateRange.start, config.dateRange.end]);
                     }
                 }
-
                 const sitesSnap = await getDocs(collection(db, 'sites'));
-                sites = sitesSnap.docs.map(doc => fromFirestore(doc.data()));
-                
+                sites = sitesSnap.docs.map(d => fromFirestore(d.data()));
                 renderSites();
                 updateSummary();
             } catch(e) { console.error("Error loading data:", e); }
         }
 
-        document.addEventListener('DOMContentLoaded', function() {
+        document.addEventListener('DOMContentLoaded', () => {
             loadTheme();
             initializeFlatpickr();
             setupEventListeners();
@@ -714,7 +700,6 @@
             document.getElementById('addSiteBtn').addEventListener('click', addSite);
             document.getElementById('autoAllocateBtn').addEventListener('click', autoAllocate);
             document.getElementById('clearAllocationBtn').addEventListener('click', clearAllocation);
-
             document.getElementById('startPoint').addEventListener('input', handleStartPointInput);
             document.getElementById('siteAddress').addEventListener('input', handleSiteAddressInput);
             document.getElementById('mileageRate').addEventListener('change', saveConfig);
@@ -727,18 +712,30 @@
             const sitesList = document.getElementById('sitesList');
             sitesList.addEventListener('click', async (e) => {
                 if (e.target.classList.contains('remove-site-btn')) {
-                    const siteId = parseInt(e.target.dataset.siteId);
-                    await removeSite(siteId);
+                    await removeSite(parseInt(e.target.dataset.siteId));
                 }
             });
+
             sitesList.addEventListener('change', async (e) => {
                  if (e.target.classList.contains('trip-input')) {
-                    const siteId = parseInt(e.target.dataset.siteId);
-                    const dateStr = e.target.dataset.dateStr;
-                    const trips = e.target.value;
-                    await updateTrips(siteId, dateStr, trips);
+                    await updateTrips(parseInt(e.target.dataset.siteId), e.target.dataset.dateStr, e.target.value);
+                }
+                // ADDED: Event listener for the new toggle switch on existing sites
+                if (e.target.classList.contains('single-trip-toggle')) {
+                    await toggleSiteSingleTripStatus(parseInt(e.target.dataset.siteId), e.target.checked);
                 }
             });
+        }
+        
+        // ADDED: New function to handle toggling the single trip status for an existing site
+        async function toggleSiteSingleTripStatus(siteId, isSingleTrip) {
+            const site = sites.find(s => s.id === siteId);
+            if (!site) return;
+
+            site.isSingleTrip = isSingleTrip;
+            
+            await saveSite(site); // Save the change to Firestore
+            renderSites(); // Re-render to update the UI
         }
         
         function toggleTheme() {
@@ -749,8 +746,7 @@
         }
 
         function loadTheme() {
-            const savedTheme = localStorage.getItem('theme') || 'light';
-            document.documentElement.setAttribute('data-theme', savedTheme);
+            document.documentElement.setAttribute('data-theme', localStorage.getItem('theme') || 'light');
         }
 
         function checkForAPIKey() {
@@ -760,9 +756,6 @@
                 document.getElementById('apiKeyInput').style.display = 'none';
                 document.getElementById('apiMessage').style.display = 'block';
                 loadGoogleMapsAPI();
-            } else {
-                document.getElementById('apiKeyInput').style.display = 'block';
-                document.getElementById('apiMessage').style.display = 'none';
             }
         }
 
@@ -777,11 +770,11 @@
         }
 
         function showAPIKeyHelp() {
-            alert(`How to get Google Maps API Key:\n\n1. Go to Google Cloud Console...\n2. ...`);
+            alert(`How to get Google Maps API Key...`);
         }
 
         function loadGoogleMapsAPI() {
-            if (document.querySelector('script[src*="maps.googleapis.com"]')) return;
+            if (window.google) return;
             const script = document.createElement('script');
             script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initMap`;
             script.async = true;
@@ -797,7 +790,7 @@
                 autocompleteService = new google.maps.places.AutocompleteService();
                 placesService = new google.maps.places.PlacesService(document.createElement('div'));
                 apiValidated = true;
-                updateAPIStatus(true, 'Google Maps API validated successfully!');
+                updateAPIStatus(true, 'Google Maps API validated!');
                 await loadData();
             } catch (error) {
                 apiValidated = false;
@@ -815,14 +808,13 @@
         }
 
         function initializeFlatpickr() {
-            const dateInput = document.getElementById('dateRange');
-            dateInput._flatpickr = flatpickr(dateInput, {
+            document.getElementById('dateRange')._flatpickr = flatpickr("#dateRange", {
                 mode: 'range',
                 dateFormat: 'Y-m-d',
-                onChange: function(selectedDates) {
+                onChange: (selectedDates) => {
                     if (selectedDates.length === 2) {
-                        config.dateRange.start = new Date(selectedDates[0]);
-                        config.dateRange.end = new Date(selectedDates[1]);
+                        config.dateRange.start = selectedDates[0];
+                        config.dateRange.end = selectedDates[1];
                         saveConfig();
                     }
                 },
@@ -831,19 +823,15 @@
         
         function handleStartPointInput(e) {
             if (e.target.value.length < 3 || !apiValidated) return;
-            autocompleteService.getPlacePredictions({ input: e.target.value }, (predictions, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.OK) {
-                    showAutocomplete('startPointDropdown', predictions, selectStartPoint);
-                }
+            autocompleteService.getPlacePredictions({ input: e.target.value }, (p, s) => {
+                if (s === 'OK') showAutocomplete('startPointDropdown', p, selectStartPoint);
             });
         }
 
         function handleSiteAddressInput(e) {
             if (e.target.value.length < 3 || !apiValidated) return;
-            autocompleteService.getPlacePredictions({ input: e.target.value }, (predictions, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.OK) {
-                    showAutocomplete('siteAddressDropdown', predictions, selectSiteAddress);
-                }
+            autocompleteService.getPlacePredictions({ input: e.target.value }, (p, s) => {
+                if (s === 'OK') showAutocomplete('siteAddressDropdown', p, selectSiteAddress);
             });
         }
 
@@ -867,7 +855,7 @@
             document.getElementById('startPoint').value = prediction.description;
             document.getElementById('startPointDropdown').style.display = 'none';
             placesService.getDetails({ placeId: prediction.place_id }, (place, status) => {
-                if (status === google.maps.places.PlacesServiceStatus.OK) {
+                if (status === 'OK') {
                     config.startPoint = prediction.description;
                     config.startPointCoords = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
                     saveConfig();
@@ -882,11 +870,10 @@
         }
 
         function useCurrentLocation() {
-            if (!navigator.geolocation) return alert('Geolocation is not supported by your browser');
+            if (!navigator.geolocation) return alert('Geolocation not supported.');
             navigator.geolocation.getCurrentPosition(pos => {
                 const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-                const geocoder = new google.maps.Geocoder();
-                geocoder.geocode({ location: coords }, (results, status) => {
+                (new google.maps.Geocoder()).geocode({ location: coords }, (results, status) => {
                     if (status === 'OK' && results[0]) {
                         document.getElementById('startPoint').value = results[0].formatted_address;
                         config.startPoint = results[0].formatted_address;
@@ -895,26 +882,23 @@
                         recalculateAllDistances();
                     }
                 });
-            }, err => alert(`Error getting location: ${err.message}`));
+            }, err => alert(`Geolocation error: ${err.message}`));
         }
 
         async function addSite() {
             if (!apiValidated) return alert('API not validated.');
             const name = document.getElementById('siteName').value.trim();
             const address = document.getElementById('siteAddress').value.trim();
-            // MODIFIED: Read the value from the new checkbox
             const isSingleTrip = document.getElementById('isSingleTripCheckbox').checked;
 
             if (!name || !address) return alert('Please enter site name and address.');
             if (!config.startPoint) return alert('Please set a start point.');
 
-            // MODIFIED: Add isSingleTrip to the new site object
             const site = { id: Date.now(), name, address, distance: 0, allocation: [], isSingleTrip };
             sites.push(site);
 
             document.getElementById('siteName').value = '';
             document.getElementById('siteAddress').value = '';
-            // MODIFIED: Reset checkbox after adding
             document.getElementById('isSingleTripCheckbox').checked = false;
 
             renderSites();
@@ -923,15 +907,15 @@
 
         function calculateDistance(site) {
              return new Promise((resolve, reject) => {
-                if (!config.startPointCoords) reject(new Error('Start point not set.'));
+                if (!config.startPointCoords) return reject(new Error('Start point not set.'));
                 placesService.findPlaceFromQuery({ query: site.address, fields: ['geometry'] }, (results, status) => {
-                    if (status === google.maps.places.PlacesServiceStatus.OK && results[0]) {
+                    if (status === 'OK' && results[0]) {
                         directionsService.route({
                             origin: config.startPointCoords,
                             destination: results[0].geometry.location,
                             travelMode: google.maps.TravelMode.DRIVING
                         }, async (result, status) => {
-                            if (status === google.maps.DirectionsStatus.OK) {
+                            if (status === 'OK') {
                                 site.distance = Math.round((result.routes[0].legs[0].distance.value / 1000) * 2 * 100) / 100;
                                 await saveSite(site);
                                 renderSites();
@@ -951,7 +935,7 @@
         async function removeSite(siteId) {
             if (confirm('Are you sure you want to remove this site?')) {
                 sites = sites.filter(s => s.id !== siteId);
-                await deleteDoc(doc(db, 'sites', siteId.toString()));
+                await deleteDoc(doc(db, 'sites', String(siteId)));
                 renderSites();
                 updateSummary();
             }
@@ -986,15 +970,12 @@
             let currentAmount = 0, dayIndex = 0;
             const maxTripsPerDay = 3;
 
-            while (currentAmount < target && dayIndex < days.length * maxTripsPerDay * sites.length) {
+            while (currentAmount < target && dayIndex < days.length * maxTripsPerDay * sites.length * 2) {
                 for (let site of sortedSites) {
                     if (currentAmount >= target) break;
                     
-                    // MODIFIED: Check if the site is a single-trip site and already has a trip
                     const hasExistingTrip = site.allocation.some(a => a.trips > 0);
-                    if (site.isSingleTrip && hasExistingTrip) {
-                        continue; // Skip this site, it already has its one trip
-                    }
+                    if (site.isSingleTrip && hasExistingTrip) continue;
 
                     const day = days[dayIndex % days.length];
                     let dayAlloc = site.allocation.find(a => a.date.getTime() === day.getTime());
@@ -1011,7 +992,7 @@
             }
 
             const batch = writeBatch(db);
-            sites.forEach(site => batch.set(doc(db, 'sites', site.id.toString()), toFirestore(site)));
+            sites.forEach(site => batch.set(doc(db, 'sites', String(site.id)), toFirestore(site)));
             await batch.commit();
 
             if (currentAmount < target) {
@@ -1026,8 +1007,8 @@
         async function clearAllocation() {
             if (confirm('Clear all trip allocations?')) {
                 sites.forEach(site => site.allocation = []);
-                 const batch = writeBatch(db);
-                 sites.forEach(site => batch.set(doc(db, 'sites', site.id.toString()), toFirestore(site)));
+                const batch = writeBatch(db);
+                sites.forEach(site => batch.set(doc(db, 'sites', String(site.id)), toFirestore(site)));
                 await batch.commit();
                 renderSites();
                 updateSummary();
@@ -1038,20 +1019,17 @@
             const site = sites.find(s => s.id === siteId);
             if (!site) return;
             const date = new Date(dateStr);
-            let dayAlloc = site.allocation.find(a => a.date.getTime() === date.getTime());
             const numTrips = Math.max(0, parseInt(trips) || 0);
 
+            let dayAlloc = site.allocation.find(a => a.date.getTime() === date.getTime());
             if (numTrips > 0) {
-                 if (!dayAlloc) {
-                    site.allocation.push({ date, trips: numTrips });
-                } else {
-                    dayAlloc.trips = numTrips;
-                }
+                 if (!dayAlloc) site.allocation.push({ date, trips: numTrips });
+                 else dayAlloc.trips = numTrips;
             } else {
                 site.allocation = site.allocation.filter(a => a.date.getTime() !== date.getTime());
             }
             await saveSite(site);
-            renderSites(); // Re-render to update disabled states
+            renderSites();
             updateSummary();
         }
 
@@ -1070,20 +1048,21 @@
             }
             const days = getDaysInRange();
             container.innerHTML = sites.sort((a,b) => a.name.localeCompare(b.name)).map(site => {
-                // MODIFIED: Calculate total trips to determine if inputs should be disabled
                 const totalAllocatedTrips = site.allocation.reduce((acc, a) => acc + a.trips, 0);
-
+                // MODIFIED: Added the checkbox toggle inside the site card's header
                 return `
                 <div class="site-card">
                     <div class="site-header">
                         <div class="site-info">
-                            <div class="site-name">
-                                ${site.name}
-                                <!-- MODIFIED: Display a badge for single trip sites -->
-                                ${site.isSingleTrip ? '<span class="status-badge status-warning">Single Trip</span>' : ''}
-                            </div>
+                            <div class="site-name">${site.name}</div>
                             <div class="site-address">${site.address}</div>
-                            <div class="site-distance">${site.distance > 0 ? `${site.distance} km (round-trip)` : '<span class="loading"></span> Calculating...'}</div>
+                            <div class="site-distance">${site.distance > 0 ? `${site.distance} km (round-trip)` : '<span class="loading"></span>'}</div>
+                            <div class="form-group" style="margin-top: 10px; margin-bottom: 0;">
+                                <label class="checkbox-label">
+                                    <input type="checkbox" class="single-trip-toggle" data-site-id="${site.id}" ${site.isSingleTrip ? 'checked' : ''}>
+                                    <span>Single Trip Only</span>
+                                </label>
+                            </div>
                         </div>
                         <button class="remove-site-btn" data-site-id="${site.id}">✕</button>
                     </div>
@@ -1094,16 +1073,12 @@
                                 const dayName = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                                 const alloc = site.allocation.find(a => a.date.toISOString().split('T')[0] === dateStr);
                                 const trips = alloc ? alloc.trips : 0;
-
-                                // MODIFIED: Logic to disable input fields
                                 const isDisabled = site.isSingleTrip && totalAllocatedTrips >= 1 && trips === 0;
-
                                 return `
                                     <div class="day-allocation">
                                         <div class="day-label">${dayName}</div>
                                         <input type="number" class="trip-input" value="${trips}" min="0" max="10" 
-                                            data-site-id="${site.id}" data-date-str="${dateStr}"
-                                            ${isDisabled ? 'disabled' : ''}>
+                                            data-site-id="${site.id}" data-date-str="${dateStr}" ${isDisabled ? 'disabled' : ''}>
                                     </div>`;
                             }).join('')}
                         </div>` : '<div class="alert alert-warning">Select a date range to allocate trips.</div>'}
