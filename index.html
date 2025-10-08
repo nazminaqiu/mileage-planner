@@ -658,7 +658,7 @@
         async function saveSite(site) {
              try {
                 await setDoc(doc(db, 'sites', site.id.toString()), toFirestore(site));
-                console.log(`Site ${site.name} saved to Firestore.`);
+                console.log(`Site ${site.name} saved successfully to Firestore.`);
             } catch(e) { console.error("Error saving site:", e); }
         }
 
@@ -683,7 +683,7 @@
                 const sitesSnap = await getDocs(collection(db, 'sites'));
                 sites = sitesSnap.docs.map(doc => fromFirestore(doc.data()));
                 
-                console.log("Data loaded from Firestore.");
+                console.log(`Loaded ${sites.length} sites from Firestore.`);
                 renderSites();
                 updateSummary();
 
@@ -707,7 +707,6 @@
             document.getElementById('autoAllocateBtn').addEventListener('click', autoAllocate);
             document.getElementById('clearAllocationBtn').addEventListener('click', clearAllocation);
 
-            // Inputs
             document.getElementById('startPoint').addEventListener('input', handleStartPointInput);
             document.getElementById('siteAddress').addEventListener('input', handleSiteAddressInput);
             document.getElementById('mileageRate').addEventListener('change', saveConfig);
@@ -717,7 +716,6 @@
             document.getElementById('mileageRate').addEventListener('input', updateSummary);
             document.getElementById('targetAmount').addEventListener('input', updateSummary);
 
-            // Event Delegation for dynamic elements
             const sitesList = document.getElementById('sitesList');
             sitesList.addEventListener('click', async (e) => {
                 if (e.target.classList.contains('remove-site-btn')) {
@@ -735,7 +733,6 @@
             });
         }
         
-        // --- THEME & API KEY ---
         function toggleTheme() {
             const html = document.documentElement;
             const newTheme = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
@@ -775,7 +772,6 @@
             alert(`How to get Google Maps API Key:\n\n1. Go to Google Cloud Console: https://console.cloud.google.com/\n2. Create a new project or select an existing one\n3. Enable these APIs:\n   - Maps JavaScript API\n   - Places API\n   - Directions API\n   - Geocoding API\n4. Go to "Credentials" and create an API Key\n5. Copy the API key and paste it here\n\nNote: You may need to set up billing, but Google provides $200 free credit monthly.`);
         }
 
-        // --- GOOGLE MAPS API ---
         function loadGoogleMapsAPI() {
             if (document.querySelector('script[src*="maps.googleapis.com"]')) return;
             const script = document.createElement('script');
@@ -810,7 +806,6 @@
             messageEl.textContent = message;
         }
 
-        // --- UI & LOGIC FUNCTIONS ---
         function initializeFlatpickr() {
             const dateInput = document.getElementById('dateRange');
             dateInput._flatpickr = flatpickr(dateInput, {
@@ -906,7 +901,7 @@
             sites.push(site);
             document.getElementById('siteName').value = '';
             document.getElementById('siteAddress').value = '';
-            renderSites(); // Render immediately for better UX
+            renderSites();
             await calculateDistance(site);
         }
 
@@ -915,10 +910,9 @@
                 if (!config.startPointCoords) reject(new Error('Start point not set.'));
                 placesService.findPlaceFromQuery({ query: site.address, fields: ['geometry'] }, (results, status) => {
                     if (status === google.maps.places.PlacesServiceStatus.OK && results[0]) {
-                        const destination = results[0].geometry.location;
                         directionsService.route({
                             origin: config.startPointCoords,
-                            destination,
+                            destination: results[0].geometry.location,
                             travelMode: google.maps.TravelMode.DRIVING
                         }, async (result, status) => {
                             if (status === google.maps.DirectionsStatus.OK) {
@@ -1044,7 +1038,6 @@
             alertDiv.style.display = 'block';
         }
 
-        // --- RENDERING & SUMMARY ---
         function renderSites() {
             const container = document.getElementById('sitesList');
             if (sites.length === 0) {
