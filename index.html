@@ -615,7 +615,6 @@
         let apiValidated = false;
 
         // --- DATA CONVERSION HELPERS ---
-        // Converts local state to a Firestore-safe format (e.g., Dates to ISO strings)
         function toFirestore(data) {
             const firestoreData = { ...data };
             if (firestoreData.dateRange) {
@@ -628,7 +627,6 @@
             return firestoreData;
         }
 
-        // Converts data from Firestore back to local state format (e.g., ISO strings to Dates)
         function fromFirestore(data) {
             const localData = { ...data };
             if (localData.dateRange) {
@@ -641,18 +639,16 @@
             return localData;
         }
 
-
         // --- FIRESTORE FUNCTIONS ---
         async function saveConfig() {
-            // Update local config object from UI
             config.mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
             config.targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
             config.includeSaturday = document.getElementById('includeSaturday').checked;
             config.includeSunday = document.getElementById('includeSunday').checked;
             
             try {
-                const configRef = doc(db, 'plannerData', 'config');
-                await setDoc(configRef, toFirestore(config));
+                await setDoc(doc(db, 'plannerData', 'config'), toFirestore(config));
+                console.log("Config saved to Firestore.");
             } catch(e) { console.error("Error saving config:", e); }
             
             renderSites();
@@ -661,16 +657,15 @@
 
         async function saveSite(site) {
              try {
-                const siteRef = doc(db, 'sites', site.id.toString());
-                await setDoc(siteRef, toFirestore(site));
+                await setDoc(doc(db, 'sites', site.id.toString()), toFirestore(site));
+                console.log(`Site ${site.name} saved to Firestore.`);
             } catch(e) { console.error("Error saving site:", e); }
         }
 
         async function loadData() {
             try {
                 // Load Config
-                const configRef = doc(db, 'plannerData', 'config');
-                const configSnap = await getDoc(configRef);
+                const configSnap = await getDoc(doc(db, 'plannerData', 'config'));
                 if (configSnap.exists()) {
                     config = fromFirestore(configSnap.data());
                     // Update UI from loaded config
@@ -680,16 +675,15 @@
                     document.getElementById('includeSaturday').checked = config.includeSaturday;
                     document.getElementById('includeSunday').checked = config.includeSunday;
                     if (config.dateRange.start && config.dateRange.end) {
-                        const fp = document.getElementById('dateRange')._flatpickr;
-                        if (fp) fp.setDate([config.dateRange.start, config.dateRange.end]);
+                        document.getElementById('dateRange')._flatpickr.setDate([config.dateRange.start, config.dateRange.end]);
                     }
                 }
 
                 // Load Sites
-                const sitesRef = collection(db, 'sites');
-                const sitesSnap = await getDocs(sitesRef);
+                const sitesSnap = await getDocs(collection(db, 'sites'));
                 sites = sitesSnap.docs.map(doc => fromFirestore(doc.data()));
                 
+                console.log("Data loaded from Firestore.");
                 renderSites();
                 updateSummary();
 
@@ -699,9 +693,9 @@
         // --- INITIALIZATION ---
         document.addEventListener('DOMContentLoaded', function() {
             loadTheme();
-            setupEventListeners();
             initializeFlatpickr();
-            checkForAPIKey(); // This will trigger loadData after API validation
+            setupEventListeners();
+            checkForAPIKey(); 
         });
 
         function setupEventListeners() {
@@ -783,28 +777,24 @@
 
         // --- GOOGLE MAPS API ---
         function loadGoogleMapsAPI() {
-            if (document.querySelector('script[src*="maps.googleapis.com"]')) {
-                console.log("Google Maps API script already loaded.");
-                return;
-            }
+            if (document.querySelector('script[src*="maps.googleapis.com"]')) return;
             const script = document.createElement('script');
             script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places,geometry&callback=initMap`;
             script.async = true;
             script.defer = true;
             script.onerror = () => updateAPIStatus(false, 'Failed to load Google Maps API. Check your API key and internet connection.');
-            window.initMap = initMap; // Make initMap globally accessible
+            window.initMap = initMap;
             document.head.appendChild(script);
         }
         
-        function initMap() {
+        async function initMap() {
             try {
                 directionsService = new google.maps.DirectionsService();
                 autocompleteService = new google.maps.places.AutocompleteService();
-                const tempDiv = document.createElement('div');
-                placesService = new google.maps.places.PlacesService(tempDiv);
+                placesService = new google.maps.places.PlacesService(document.createElement('div'));
                 apiValidated = true;
                 updateAPIStatus(true, 'Google Maps API validated successfully!');
-                loadData(); // Load data from Firestore now that API is ready
+                await loadData();
             } catch (error) {
                 apiValidated = false;
                 updateAPIStatus(false, `API validation failed: ${error.message}`);
@@ -814,15 +804,9 @@
         function updateAPIStatus(success, message) {
             const badge = document.getElementById('apiStatusBadge');
             const messageEl = document.getElementById('apiMessage');
-            if (success) {
-                badge.className = 'status-badge status-success';
-                badge.textContent = 'Connected';
-                messageEl.className = 'alert alert-info';
-            } else {
-                badge.className = 'status-badge status-error';
-                badge.textContent = 'Error';
-                messageEl.className = 'alert alert-danger';
-            }
+            badge.className = success ? 'status-badge status-success' : 'status-badge status-error';
+            badge.textContent = success ? 'Connected' : 'Error';
+            messageEl.className = success ? 'alert alert-info' : 'alert alert-danger';
             messageEl.textContent = message;
         }
 
@@ -843,9 +827,8 @@
         }
         
         function handleStartPointInput(e) {
-            const value = e.target.value;
-            if (value.length < 3 || !apiValidated) return;
-            autocompleteService.getPlacePredictions({ input: value }, (predictions, status) => {
+            if (e.target.value.length < 3 || !apiValidated) return;
+            autocompleteService.getPlacePredictions({ input: e.target.value }, (predictions, status) => {
                 if (status === google.maps.places.PlacesServiceStatus.OK) {
                     showAutocomplete('startPointDropdown', predictions, selectStartPoint);
                 }
@@ -853,9 +836,8 @@
         }
 
         function handleSiteAddressInput(e) {
-            const value = e.target.value;
-            if (value.length < 3 || !apiValidated) return;
-            autocompleteService.getPlacePredictions({ input: value }, (predictions, status) => {
+            if (e.target.value.length < 3 || !apiValidated) return;
+            autocompleteService.getPlacePredictions({ input: e.target.value }, (predictions, status) => {
                 if (status === google.maps.places.PlacesServiceStatus.OK) {
                     showAutocomplete('siteAddressDropdown', predictions, selectSiteAddress);
                 }
@@ -866,18 +848,15 @@
             const dropdown = document.getElementById(dropdownId);
             dropdown.innerHTML = '';
             dropdown.style.display = 'block';
-            predictions.forEach(prediction => {
+            predictions.forEach(p => {
                 const item = document.createElement('div');
                 item.className = 'autocomplete-item';
-                item.textContent = prediction.description;
-                item.onclick = () => callback(prediction);
+                item.textContent = p.description;
+                item.onclick = () => callback(p);
                 dropdown.appendChild(item);
             });
-            document.addEventListener('click', function closeDropdown(e) {
-                if (!dropdown.contains(e.target)) {
-                    dropdown.style.display = 'none';
-                    document.removeEventListener('click', closeDropdown);
-                }
+            document.addEventListener('click', e => {
+                if (!dropdown.contains(e.target)) dropdown.style.display = 'none';
             }, { once: true });
         }
 
@@ -900,9 +879,9 @@
         }
 
         function useCurrentLocation() {
-            if (!navigator.geolocation) { alert('Geolocation is not supported by your browser'); return; }
-            navigator.geolocation.getCurrentPosition((position) => {
-                const coords = { lat: position.coords.latitude, lng: position.coords.longitude };
+            if (!navigator.geolocation) return alert('Geolocation is not supported by your browser');
+            navigator.geolocation.getCurrentPosition(pos => {
+                const coords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
                 const geocoder = new google.maps.Geocoder();
                 geocoder.geocode({ location: coords }, (results, status) => {
                     if (status === 'OK' && results[0]) {
@@ -913,65 +892,56 @@
                         recalculateAllDistances();
                     }
                 });
-            }, (error) => alert('Error getting location: ' + error.message));
+            }, err => alert(`Error getting location: ${err.message}`));
         }
 
         async function addSite() {
-            if (!apiValidated) { alert('Please wait for API validation to complete'); return; }
+            if (!apiValidated) return alert('API not validated.');
             const name = document.getElementById('siteName').value.trim();
             const address = document.getElementById('siteAddress').value.trim();
-            if (!name || !address) { alert('Please enter both site name and address'); return; }
-            if (!config.startPoint) { alert('Please set your start point first'); return; }
+            if (!name || !address) return alert('Please enter site name and address.');
+            if (!config.startPoint) return alert('Please set a start point.');
 
             const site = { id: Date.now(), name, address, distance: 0, allocation: [] };
             sites.push(site);
-            await calculateDistance(site); // This now saves the site after calculation
-            
             document.getElementById('siteName').value = '';
             document.getElementById('siteAddress').value = '';
-            renderSites();
+            renderSites(); // Render immediately for better UX
+            await calculateDistance(site);
         }
 
         function calculateDistance(site) {
              return new Promise((resolve, reject) => {
-                if (!config.startPointCoords) {
-                    alert('Start point coordinates not available. Please select start point again.');
-                    return reject();
-                }
+                if (!config.startPointCoords) reject(new Error('Start point not set.'));
                 placesService.findPlaceFromQuery({ query: site.address, fields: ['geometry'] }, (results, status) => {
                     if (status === google.maps.places.PlacesServiceStatus.OK && results[0]) {
                         const destination = results[0].geometry.location;
                         directionsService.route({
-                            origin: new google.maps.LatLng(config.startPointCoords.lat, config.startPointCoords.lng),
+                            origin: config.startPointCoords,
                             destination,
                             travelMode: google.maps.TravelMode.DRIVING
                         }, async (result, status) => {
                             if (status === google.maps.DirectionsStatus.OK) {
-                                const distance = result.routes[0].legs[0].distance.value / 1000;
-                                site.distance = Math.round(distance * 2 * 100) / 100;
-                                await saveSite(site); // Save to Firestore
+                                site.distance = Math.round((result.routes[0].legs[0].distance.value / 1000) * 2 * 100) / 100;
+                                await saveSite(site);
                                 renderSites();
                                 updateSummary();
                                 resolve();
-                            } else { reject(); }
+                            } else { reject(new Error('Directions service failed.')); }
                         });
-                    } else { reject(); }
+                    } else { reject(new Error('Place not found.')); }
                 });
             });
         }
 
         async function recalculateAllDistances() {
-            for (const site of sites) {
-                await calculateDistance(site);
-            }
+            for (const site of sites) await calculateDistance(site);
         }
 
         async function removeSite(siteId) {
             if (confirm('Are you sure you want to remove this site?')) {
                 sites = sites.filter(s => s.id !== siteId);
-                try {
-                    await deleteDoc(doc(db, 'sites', siteId.toString()));
-                } catch(e) { console.error("Error removing site:", e); }
+                await deleteDoc(doc(db, 'sites', siteId.toString()));
                 renderSites();
                 updateSummary();
             }
@@ -993,18 +963,17 @@
         }
 
         async function autoAllocate() {
-            if (sites.length === 0) { alert('Please add at least one site first'); return; }
-            if (!config.dateRange.start) { alert('Please select a date range first'); return; }
+            if (sites.length === 0) return alert('Please add at least one site.');
+            if (!config.dateRange.start) return alert('Please select a date range.');
             const target = parseFloat(document.getElementById('targetAmount').value) || 0;
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
-            if (target <= 0) { alert('Please set a target amount greater than 0'); return; }
+            if (target <= 0) return alert('Please set a target amount > 0.');
             const days = getDaysInRange();
-            if (days.length === 0) { alert('No available days in the selected range'); return; }
+            if (days.length === 0) return alert('No available days in range.');
             
             sites.forEach(site => site.allocation = []);
             const sortedSites = [...sites].sort((a, b) => b.distance - a.distance);
-            let currentAmount = 0;
-            let dayIndex = 0;
+            let currentAmount = 0, dayIndex = 0;
             const maxTripsPerDay = 3;
 
             while (currentAmount < target && dayIndex < days.length * maxTripsPerDay * sites.length) {
@@ -1024,18 +993,14 @@
                 }
             }
 
-            // Batch save all updated sites to Firestore
             const batch = writeBatch(db);
-            sites.forEach(site => {
-                const siteRef = doc(db, 'sites', site.id.toString());
-                batch.set(siteRef, toFirestore(site));
-            });
+            sites.forEach(site => batch.set(doc(db, 'sites', site.id.toString()), toFirestore(site)));
             await batch.commit();
 
             if (currentAmount < target) {
-                showAllocationAlert('warning', `Target not fully met. Shortfall: RM ${(target - currentAmount).toFixed(2)}. Consider adding more sites, extending the date range, or manually adding trips.`);
+                showAllocationAlert('warning', `Target not fully met. Shortfall: RM ${(target - currentAmount).toFixed(2)}.`);
             } else {
-                showAllocationAlert('info', `Allocation complete! Total: RM ${currentAmount.toFixed(2)} (${((currentAmount/target)*100).toFixed(1)}% of target)`);
+                showAllocationAlert('info', `Allocation complete! Total: RM ${currentAmount.toFixed(2)}.`);
             }
             renderSites();
             updateSummary();
@@ -1045,10 +1010,7 @@
             if (confirm('Clear all trip allocations?')) {
                 sites.forEach(site => site.allocation = []);
                  const batch = writeBatch(db);
-                 sites.forEach(site => {
-                    const siteRef = doc(db, 'sites', site.id.toString());
-                    batch.set(siteRef, toFirestore(site));
-                });
+                 sites.forEach(site => batch.set(doc(db, 'sites', site.id.toString()), toFirestore(site)));
                 await batch.commit();
                 renderSites();
                 updateSummary();
@@ -1060,20 +1022,17 @@
             if (!site) return;
             const date = new Date(dateStr);
             let dayAlloc = site.allocation.find(a => a.date.getTime() === date.getTime());
-            
             const numTrips = Math.max(0, parseInt(trips) || 0);
 
             if (numTrips > 0) {
                  if (!dayAlloc) {
-                    dayAlloc = { date, trips: numTrips };
-                    site.allocation.push(dayAlloc);
+                    site.allocation.push({ date, trips: numTrips });
                 } else {
                     dayAlloc.trips = numTrips;
                 }
-            } else { // trips are 0, remove allocation
+            } else {
                 site.allocation = site.allocation.filter(a => a.date.getTime() !== date.getTime());
             }
-            
             await saveSite(site);
             updateSummary();
         }
@@ -1089,17 +1048,17 @@
         function renderSites() {
             const container = document.getElementById('sitesList');
             if (sites.length === 0) {
-                container.innerHTML = '<div class="alert alert-info">No sites added yet. Add your first project site above.</div>';
+                container.innerHTML = '<div class="alert alert-info">No sites added yet.</div>';
                 return;
             }
             const days = getDaysInRange();
-            container.innerHTML = sites.map(site => `
+            container.innerHTML = sites.sort((a,b) => a.name.localeCompare(b.name)).map(site => `
                 <div class="site-card">
                     <div class="site-header">
                         <div class="site-info">
                             <div class="site-name">${site.name}</div>
                             <div class="site-address">${site.address}</div>
-                            <div class="site-distance">${site.distance > 0 ? `${site.distance} km (round-trip)` : 'Calculating...'}</div>
+                            <div class="site-distance">${site.distance > 0 ? `${site.distance} km (round-trip)` : '<span class="loading"></span> Calculating...'}</div>
                         </div>
                         <button class="remove-site-btn" data-site-id="${site.id}">✕</button>
                     </div>
@@ -1109,27 +1068,23 @@
                                 const dateStr = day.toISOString().split('T')[0];
                                 const dayName = day.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
                                 const alloc = site.allocation.find(a => a.date.toISOString().split('T')[0] === dateStr);
-                                const trips = alloc ? alloc.trips : 0;
                                 return `
                                     <div class="day-allocation">
                                         <div class="day-label">${dayName}</div>
-                                        <input type="number" class="trip-input" value="${trips}" min="0" max="10" 
+                                        <input type="number" class="trip-input" value="${alloc ? alloc.trips : 0}" min="0" max="10" 
                                             data-site-id="${site.id}" data-date-str="${dateStr}">
                                     </div>`;
                             }).join('')}
-                        </div>` : '<div class="alert alert-warning">Select a date range to allocate trips</div>'}
+                        </div>` : '<div class="alert alert-warning">Select a date range to allocate trips.</div>'}
                 </div>`).join('');
         }
 
         function updateSummary() {
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
             const target = parseFloat(document.getElementById('targetAmount').value) || 0;
-            let totalDistance = 0;
-            sites.forEach(site => {
-                site.allocation.forEach(alloc => {
-                    totalDistance += site.distance * alloc.trips;
-                });
-            });
+            let totalDistance = sites.reduce((sum, site) => 
+                sum + site.allocation.reduce((siteSum, alloc) => siteSum + (site.distance * alloc.trips), 0), 0);
+            
             const totalAmount = totalDistance * rate;
             const progress = target > 0 ? Math.min((totalAmount / target) * 100, 100) : 0;
             
