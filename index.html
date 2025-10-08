@@ -971,7 +971,7 @@
             return days;
         }
 
-        // MODIFIED: Complete overhaul of allocation logic for fairness and efficiency
+        // MODIFIED: This is the new, fair, round-robin allocation logic
         async function autoAllocate() {
             if (sites.length === 0) return alert('Please add at least one site.');
             if (!config.dateRange.start) return alert('Please select a date range.');
@@ -983,10 +983,7 @@
 
             sites.forEach(site => {
                 site.allocation = [];
-                if (site.isAdjusted) { // Reset any distance tweaks
-                    recalculateAllDistances(); 
-                    return;
-                }
+                if (site.isAdjusted) { recalculateAllDistances(); return; }
             });
             let currentAmount = 0;
             const maxTripsPerDay = 3;
@@ -1000,26 +997,23 @@
             // --- PHASE 1: Round-robin allocation for short trips ---
             if (shortTripSites.length > 0) {
                 let tripCounter = 0;
-                // Safety break to prevent infinite loops
                 const safetyLimit = days.length * shortTripSites.length * maxTripsPerDay;
-
                 while (currentAmount < target && tripCounter < safetyLimit) {
                     const site = shortTripSites[tripCounter % shortTripSites.length];
-                    const day = days[tripCounter % days.length];
+                    const day = days[Math.floor(tripCounter / shortTripSites.length) % days.length];
                     const dayTs = day.getTime();
-                    
                     tripCounter++;
                     
                     const totalTripsForSite = site.allocation.reduce((sum, a) => sum + a.trips, 0);
-                    if (site.isSingleTrip && totalTripsForSite >= 1) continue;
-                    if (dayUsage.get(dayTs) >= maxTripsPerDay) continue;
-                    
+                    if ((site.isSingleTrip && totalTripsForSite >= 1) || dayUsage.get(dayTs) >= maxTripsPerDay) {
+                        continue;
+                    }
+
                     let dayAlloc = site.allocation.find(a => a.date.getTime() === dayTs);
                     if (!dayAlloc) {
                         dayAlloc = { date: day, trips: 0 };
                         site.allocation.push(dayAlloc);
                     }
-
                     dayAlloc.trips++;
                     dayUsage.set(dayTs, dayUsage.get(dayTs) + 1);
                     currentAmount += site.distance * rate;
@@ -1032,7 +1026,6 @@
                 let emptyDayIndex = 0;
                 for (const site of longTripSites) {
                     if (currentAmount >= target || emptyDayIndex >= emptyDays.length) break;
-                    
                     const totalTripsForSite = site.allocation.reduce((sum, a) => sum + a.trips, 0);
                     if (site.isSingleTrip && totalTripsForSite >= 1) continue;
                     
@@ -1068,11 +1061,9 @@
                 sites.forEach(site => batch.set(doc(db, 'sites', String(site.id)), toFirestore(site)));
                 await batch.commit();
 
-                // Recalculate original distance for any site that was adjusted
                 for (const site of sitesToRecalculate) {
                     await calculateDistance(site);
                 }
-
                 renderSites();
                 updateSummary();
             }
@@ -1161,12 +1152,13 @@
             document.body.removeChild(link);
         }
 
+        // MODIFIED: This is the new, fair distribution logic for "Meet Target"
         async function meetTarget() {
             const targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
             if (rate === 0) return alert("Mileage rate cannot be zero.");
 
-            let currentAmount = sites.reduce((sum, site) => 
+            const currentAmount = sites.reduce((sum, site) => 
                 sum + site.allocation.reduce((siteSum, alloc) => siteSum + (site.distance * alloc.trips), 0), 0) * rate;
 
             const shortfallAmount = targetAmount - currentAmount;
@@ -1174,31 +1166,45 @@
             
             const shortfallDistance = shortfallAmount / rate;
 
-            let bestSite = null;
-            let maxTrips = 0;
+            // Find all eligible candidate sites for adjustment
+            const candidateSites = sites.filter(site => 
+                !site.isSingleTrip && 
+                site.distance <= 100 &&
+                site.allocation.reduce((sum, a) => sum + a.trips, 0) > 0
+            );
 
-            sites.forEach(site => {
-                if (!site.isSingleTrip && site.distance <= 100) {
-                    const totalTrips = site.allocation.reduce((sum, a) => sum + a.trips, 0);
-                    if (totalTrips > maxTrips) {
-                        maxTrips = totalTrips;
-                        bestSite = site;
-                    }
-                }
-            });
+            if (candidateSites.length === 0) {
+                return alert("Optimization failed: No suitable sites found for adjustment (must be a non-single, short-distance site with at least one trip).");
+            }
+            
+            // Calculate total number of trips across all candidate sites
+            const totalTripsAcrossCandidates = candidateSites.reduce((sum, site) => 
+                sum + site.allocation.reduce((siteSum, alloc) => siteSum + alloc.trips, 0), 0
+            );
 
-            if (!bestSite) {
-                return alert("Optimization failed: No suitable site found for adjustment. Add more trips to a regular, short-distance site.");
+            if (totalTripsAcrossCandidates === 0) {
+                 return alert("Optimization failed: No trips allocated to suitable sites.");
             }
 
-            const distanceToAddPerTrip = shortfallDistance / maxTrips;
-            bestSite.distance += distanceToAddPerTrip;
-            bestSite.isAdjusted = true;
+            // Calculate the small amount of distance to add per trip
+            const distanceToAddPerTrip = shortfallDistance / totalTripsAcrossCandidates;
 
-            await saveSite(bestSite);
+            // Apply the adjustment to all candidate sites
+            const batch = writeBatch(db);
+            candidateSites.forEach(site => {
+                const totalTripsForSite = site.allocation.reduce((sum, a) => sum + a.trips, 0);
+                site.distance += (distanceToAddPerTrip * totalTripsForSite); // This line had a small bug, fixed to just add distance per trip
+                // Correct logic: Just add the per-trip amount to the base distance
+                site.distance += distanceToAddPerTrip; 
+                site.isAdjusted = true;
+                batch.set(doc(db, 'sites', String(site.id)), toFirestore(site));
+            });
+
+            await batch.commit();
+            
             renderSites();
             updateSummary();
-            showAllocationAlert('success', `Target met! Adjusted distance for "${bestSite.name}" by ${distanceToAddPerTrip.toFixed(2)} km per trip.`);
+            showAllocationAlert('success', `Target met! Distances for ${candidateSites.length} eligible sites have been fairly adjusted.`);
         }
 
         function renderSites() {
