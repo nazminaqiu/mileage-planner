@@ -563,6 +563,12 @@
         <!-- Summary -->
         <div class="section">
             <div class="section-title">📊 Summary</div>
+
+            <!-- ADDED: Export button -->
+            <div class="btn-group" style="margin-top: 0; margin-bottom: 24px;">
+                <button id="exportCsvBtn" class="btn btn-secondary">📄 Export to CSV</button>
+            </div>
+            
             <div class="summary-grid">
                 <div class="summary-card">
                     <div class="summary-label">Total Distance</div>
@@ -708,6 +714,9 @@
             document.getElementById('includeSunday').addEventListener('change', saveConfig);
             document.getElementById('mileageRate').addEventListener('input', updateSummary);
             document.getElementById('targetAmount').addEventListener('input', updateSummary);
+            
+            // ADDED: Event listener for the new export button
+            document.getElementById('exportCsvBtn').addEventListener('click', exportToCsv);
 
             const sitesList = document.getElementById('sitesList');
             sitesList.addEventListener('click', async (e) => {
@@ -720,22 +729,18 @@
                  if (e.target.classList.contains('trip-input')) {
                     await updateTrips(parseInt(e.target.dataset.siteId), e.target.dataset.dateStr, e.target.value);
                 }
-                // ADDED: Event listener for the new toggle switch on existing sites
                 if (e.target.classList.contains('single-trip-toggle')) {
                     await toggleSiteSingleTripStatus(parseInt(e.target.dataset.siteId), e.target.checked);
                 }
             });
         }
         
-        // ADDED: New function to handle toggling the single trip status for an existing site
         async function toggleSiteSingleTripStatus(siteId, isSingleTrip) {
             const site = sites.find(s => s.id === siteId);
             if (!site) return;
-
             site.isSingleTrip = isSingleTrip;
-            
-            await saveSite(site); // Save the change to Firestore
-            renderSites(); // Re-render to update the UI
+            await saveSite(site);
+            renderSites();
         }
         
         function toggleTheme() {
@@ -1040,6 +1045,68 @@
             alertDiv.style.display = 'block';
         }
 
+        // ADDED: New function to handle CSV exporting
+        function exportToCsv() {
+            const claimEntries = [];
+            const mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
+
+            sites.forEach(site => {
+                site.allocation.forEach(alloc => {
+                    if (alloc.trips > 0) {
+                        const totalDistance = site.distance * alloc.trips;
+                        const totalAmount = totalDistance * mileageRate;
+                        claimEntries.push({
+                            date: alloc.date,
+                            siteName: site.name,
+                            siteAddress: site.address,
+                            trips: alloc.trips,
+                            distancePerTrip: site.distance,
+                            totalDistanceForDay: totalDistance.toFixed(2),
+                            mileageRate: mileageRate.toFixed(2),
+                            totalAmountForDay: totalAmount.toFixed(2)
+                        });
+                    }
+                });
+            });
+
+            if (claimEntries.length === 0) {
+                alert('No claim entries to export. Please allocate some trips first.');
+                return;
+            }
+
+            claimEntries.sort((a, b) => a.date - b.date);
+
+            const headers = [
+                'Date', 'Site Name', 'Site Address', 'Trips', 
+                'Distance per Trip (km)', 'Total Distance for Day (km)', 
+                'Mileage Rate (RM/km)', 'Total Amount for Day (RM)'
+            ];
+
+            const csvRows = claimEntries.map(entry => {
+                const formattedDate = entry.date.toISOString().split('T')[0];
+                const row = [
+                    formattedDate, entry.siteName, entry.siteAddress, entry.trips,
+                    entry.distancePerTrip, entry.totalDistanceForDay,
+                    entry.mileageRate, entry.totalAmountForDay
+                ];
+                return row.map(cell => {
+                    const cellString = String(cell);
+                    return cellString.includes(',') ? `"${cellString}"` : cellString;
+                }).join(',');
+            });
+
+            const csvContent = [headers.join(','), ...csvRows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            const today = new Date().toISOString().split('T')[0];
+            link.setAttribute('href', url);
+            link.setAttribute('download', `mileage-claim-${today}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         function renderSites() {
             const container = document.getElementById('sitesList');
             if (sites.length === 0) {
@@ -1049,7 +1116,6 @@
             const days = getDaysInRange();
             container.innerHTML = sites.sort((a,b) => a.name.localeCompare(b.name)).map(site => {
                 const totalAllocatedTrips = site.allocation.reduce((acc, a) => acc + a.trips, 0);
-                // MODIFIED: Added the checkbox toggle inside the site card's header
                 return `
                 <div class="site-card">
                     <div class="site-header">
