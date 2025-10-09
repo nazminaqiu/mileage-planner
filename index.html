@@ -36,6 +36,10 @@
             --border-color: #495057;
             --shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
+        
+        html {
+            scroll-behavior: smooth;
+        }
 
         body {
             font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -661,14 +665,12 @@
             
             <hr style="margin: 32px 0; border: none; border-top: 1px solid var(--border-color);">
             
-            <div class="section-title">Generated Results</div>
+            <div class="section-title" id="generated-results-anchor">Generated Results</div>
             
-            <!-- Global action button for exporting the planner configuration -->
             <div class="btn-group" style="margin-top: 0; margin-bottom: 16px;">
                  <button id="exportJsonBtn" class="btn btn-secondary">💾 Export Planner Config (JSON)</button>
             </div>
 
-            <!-- Container for Planner Results -->
             <div id="plannerResultsContainer">
                 <div class="subsection-title">Results from Planner</div>
                 <div class="btn-group" style="margin-top:0; margin-bottom: 15px;">
@@ -679,7 +681,6 @@
                 </div>
             </div>
 
-            <!-- Container for Uploaded JSON Results -->
             <div id="jsonResultsContainer" style="margin-top: 24px;">
                 <div class="subsection-title">Results from Uploaded OT File</div>
                  <div class="btn-group" style="margin-top:0; margin-bottom: 15px;">
@@ -854,7 +855,6 @@
             document.getElementById('meetTargetBtn').addEventListener('click', meetTarget);
             document.getElementById('exportPlannerCsvBtn').addEventListener('click', exportPlannerResultsToCsv);
             document.getElementById('exportFileCsvBtn').addEventListener('click', exportFileResultsToCsv);
-
 
             const sitesList = document.getElementById('sitesList');
             sitesList.addEventListener('click', async (e) => {
@@ -1431,6 +1431,7 @@
             savePlannerResults(plannerGeneratedData);
             displayPlannerResults(plannerGeneratedData);
             showAllocationAlert('success', `Successfully generated ${plannerGeneratedData.length} unique work descriptions from the planner!`);
+            document.getElementById('generated-results-anchor').scrollIntoView({ behavior: 'smooth' });
         }
 
         function processUploadedJsonFile() {
@@ -1459,6 +1460,7 @@
                     await saveFileResults(fileGeneratedData);
                     displayUploadedFileResults(fileGeneratedData);
                     showAllocationAlert('success', `Successfully processed ${fileGeneratedData.length} entries from the uploaded file!`);
+                    document.getElementById('generated-results-anchor').scrollIntoView({ behavior: 'smooth' });
 
                 } catch (e) {
                     alert('Error parsing JSON file. Please ensure it is valid.');
@@ -1479,9 +1481,11 @@
                     <thead><tr><th>Date</th><th>Site Name</th><th>Generated Work Description</th></tr></thead>
                     <tbody>`;
             data.forEach(entry => {
+                const dateObj = entry.date instanceof Date ? entry.date : new Date(entry.date);
+                const formattedDate = !isNaN(dateObj) ? dateObj.toLocaleDateString() : 'Invalid Date';
                 html += `
                     <tr>
-                        <td>${entry.date.toLocaleDateString()}</td>
+                        <td>${formattedDate}</td>
                         <td>${entry.siteName}</td>
                         <td>${entry.workDescription}</td>
                     </tr>`;
