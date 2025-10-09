@@ -1170,28 +1170,28 @@
         function generateWorkDescription(siteName, date, keywords) {
             const lexicon = {
                 'default': {
-                    actionVerbs: ['Sorted out', 'Had a look at', 'Fixed up', 'Ran a check on', 'Tinkered with'],
+                    actionVerbs: ['Sorted out', 'Fixed up', 'Ran a check on', 'Reconfigured', 'Tinkered with'],
                     itObjects: ['the main switch', 'a router', 'the office firewall', 'a Wi-Fi point', 'the server rack', 'a user\'s PC', 'the phone system'],
-                    purposes: ['to get everyone back online', 'to speed things up a bit', 'because someone logged a ticket', 'to stop any security issues'],
-                    specifics: ['a wonky VLAN setting', 'a power supply that was giving up', 'some really old firmware', 'a simple DNS mix-up']
+                    purposes: ['to get everyone back online', 'to speed things up a bit', 'to resolve a user ticket', 'to patch a security hole'],
+                    diagnoses: ['a misconfigured VLAN', 'a faulty power supply', 'outdated firmware', 'a DNS issue', 'a loose cable']
                 },
                 'kaseya': {
                     actionVerbs: ['Pushed the VSA agent to', 'Fixed a broken script on', 'Updated a script for', 'Pulled a report from', 'Ran patches on'],
-                    itObjects: ['the servers', 'a bunch of PCs', 'the main controller', 'the important gear', 'the remote tool'],
-                    purposes: ['to get all the agents installed', 'to get a maintenance job running automatically', 'for the usual monthly updates', 'to clear a security warning'],
-                    specifics: ['the agent just couldnt log in right', 'a typo in the script', 'a new security rule we had to follow', 'an alert from the monitoring system']
+                    itObjects: ['the servers', 'a bunch of PCs', 'the domain controller', 'the critical gear', 'the remote management tool'],
+                    purposes: ['to ensure all agents were installed', 'to automate a maintenance job', 'for the monthly patch cycle', 'to clear a security warning'],
+                    diagnoses: ['an agent login issue', 'a typo in the script', 'a new security policy requirement', 'an alert from the monitoring system']
                 },
                 'network': {
-                    actionVerbs: ['Updated the firmware on', 'Swapped out a dead', 'Cleaned up the cabling for', 'Changed the VLANs on', 'Popped in a new'],
-                    itObjects: ['the main switch', 'an edge router', 'a Wi-Fi AP', 'a patch panel port', 'a fiber connector', 'the office firewall'],
-                    purposes: ['so the network can handle more traffic', 'to stop the connection from dropping', 'to keep guest Wi-Fi separate', 'to link up another office'],
-                    specifics: ['the network was just screaming with traffic', 'the connection was super slow', 'to match the new network map', 'it ran out of IP addresses to give']
+                    actionVerbs: ['Updated the firmware on', 'Swapped out a faulty', 'Tidied up the cabling for', 'Changed the VLANs on', 'Installed a new'],
+                    itObjects: ['the core switch', 'an edge router', 'a Wi-Fi AP', 'a patch panel port', 'a fiber transceiver', 'the branch firewall'],
+                    purposes: ['to handle more traffic', 'to fix a dropping connection', 'to separate guest and staff Wi-Fi', 'to link up with another office'],
+                    diagnoses: ['a broadcast storm', 'high latency on the link', 'a mismatch with the network diagram', 'the DHCP server running out of IPs']
                 },
                 'server': {
-                    actionVerbs: ['Ran Windows updates on', 'Swapped a bad hard drive in', 'Moved a VM over to', 'Checked the usage on', 'Did a quick security check on'],
-                    itObjects: ['the main domain controller', 'the file server', 'the VMware host', 'the database server', 'the physical server box'],
-                    purposes: ['for the usual server TLC', 'to make sure no data was lost', 'to spread the load a bit', 'because things were running slow'],
-                    specifics: ['the event logs were full of errors', 'we got an alert the drive was about to die', 'to get ready to retire some old kit', 'the CPU was maxing out']
+                    actionVerbs: ['Ran Windows updates on', 'Replaced a failed hard drive in', 'Moved a VM to', 'Checked resource usage on', 'Performed a quick security audit on'],
+                    itObjects: ['the domain controller', 'the file server', 'a different VMware host', 'the database server', 'the physical server'],
+                    purposes: ['for scheduled server maintenance', 'to prevent data loss', 'to better balance the load', 'to figure out why it was running slow'],
+                    diagnoses: ['errors in the system event logs', 'a predictive drive failure alert', 'preparation for retiring old hardware', 'the CPU hitting 100%']
                 }
             };
 
@@ -1211,9 +1211,18 @@
             const action = getRandomItem(vocab.actionVerbs);
             const obj = getRandomItem(vocab.itObjects);
             const purpose = getRandomItem(vocab.purposes);
-            const specific = getRandomItem(vocab.specifics);
-            
-            return `${action} ${obj} at ${siteName} ${purpose}. The root cause was just ${specific.toLowerCase()}.`;
+            const diagnosis = getRandomItem(vocab.diagnoses);
+
+            const templates = [
+                () => `${action} ${obj} at ${siteName} ${purpose}. The problem was traced back to ${diagnosis}.`,
+                () => `At ${siteName}, worked on the ${obj} to ${purpose}. Found that the issue was caused by ${diagnosis}.`,
+                () => `A site visit to ${siteName} was needed to address an issue with ${obj}. The cause was simply ${diagnosis}, and the fix was implemented to ${purpose}.`,
+                () => `To ${purpose}, ${action.toLowerCase()} ${obj} at ${siteName}. It was discovered that ${diagnosis} was the culprit.`,
+                () => `Visited ${siteName} to handle a problem with ${obj}. It was a case of ${diagnosis}, and the work was completed to ${purpose}.`
+            ];
+
+            const selectedTemplate = getRandomItem(templates);
+            return selectedTemplate();
         }
 
         function generateAllDescriptions() {
@@ -1231,7 +1240,7 @@
             });
             
             displayClaimDetails();
-            showAllocationAlert('success', `Successfully generated ${generatedDescriptions.length} context-aware work descriptions!`);
+            showAllocationAlert('success', `Successfully generated ${generatedDescriptions.length} unique work descriptions!`);
         }
 
         function displayClaimDetails() {
