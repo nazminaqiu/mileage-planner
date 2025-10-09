@@ -556,6 +556,11 @@
                     </label>
                 </div>
             </div>
+            
+            <div class="form-group">
+                <label>Project Keywords (optional)</label>
+                <input type="text" id="siteKeywords" placeholder="e.g., Kaseya VSA, network upgrade, server maintenance">
+            </div>
 
             <button id="addSiteBtn" class="btn btn-primary">➕ Add Site</button>
         </div>
@@ -584,8 +589,11 @@
             <div class="btn-group" style="margin-top: 0; margin-bottom: 24px;">
                 <button id="exportCsvBtn" class="btn btn-secondary">📄 Export to CSV</button>
                 <button id="exportJsonBtn" class="btn btn-secondary">💾 Export to JSON</button>
+                <button id="generateDescBtn" class="btn btn-primary">🤖 Generate Descriptions</button>
             </div>
             
+            <div id="claimDetailsLog" style="margin-top: 20px;"></div>
+
             <div class="summary-grid">
                 <div class="summary-card">
                     <div class="summary-label">Total Distance</div>
@@ -644,6 +652,7 @@
         };
         let apiKey = '';
         let apiValidated = false;
+        let generatedDescriptions = [];
 
         function toFirestore(data) {
             const firestoreData = { ...data };
@@ -733,6 +742,7 @@
             document.getElementById('targetAmount').addEventListener('input', updateSummary);
             document.getElementById('exportCsvBtn').addEventListener('click', exportToCsv);
             document.getElementById('exportJsonBtn').addEventListener('click', exportToJson);
+            document.getElementById('generateDescBtn').addEventListener('click', generateAllDescriptions);
             document.getElementById('meetTargetBtn').addEventListener('click', meetTarget);
 
             const sitesList = document.getElementById('sitesList');
@@ -748,6 +758,17 @@
                 }
                 if (e.target.classList.contains('single-trip-toggle')) {
                     await toggleSiteSingleTripStatus(parseInt(e.target.dataset.siteId), e.target.checked);
+                }
+            });
+            
+            sitesList.addEventListener('input', async (e) => {
+                if (e.target.classList.contains('site-keywords-input')) {
+                    const siteId = parseInt(e.target.dataset.siteId);
+                    const site = sites.find(s => s.id === siteId);
+                    if (site) {
+                        site.keywords = e.target.value.trim();
+                        await saveSite(site);
+                    }
                 }
             });
         }
@@ -912,10 +933,12 @@
             const name = document.getElementById('siteName').value.trim();
             const address = document.getElementById('siteAddress').value.trim();
             const isSingleTrip = document.getElementById('isSingleTripCheckbox').checked;
-            const site = { id: Date.now(), name, address, distance: 0, allocation: [], isSingleTrip, isAdjusted: false };
+            const keywords = document.getElementById('siteKeywords').value.trim();
+            const site = { id: Date.now(), name, address, distance: 0, allocation: [], isSingleTrip, isAdjusted: false, keywords: keywords };
             sites.push(site);
             document.getElementById('siteName').value = '';
             document.getElementById('siteAddress').value = '';
+            document.getElementById('siteKeywords').value = '';
             document.getElementById('isSingleTripCheckbox').checked = false;
             renderSites();
             await calculateDistance(site);
@@ -973,7 +996,6 @@
             return days;
         }
 
-        // ADDED: Shuffle helper function for randomization
         function shuffleArray(array) {
             for (let i = array.length - 1; i > 0; i--) {
                 const j = Math.floor(Math.random() * (i + 1));
@@ -981,7 +1003,6 @@
             }
         }
 
-        // MODIFIED: This is the final, fair, multi-pass allocation logic
         async function autoAllocate() {
             if (sites.length === 0) return alert('Please add at least one site.');
             if (!config.dateRange.start) return alert('Please select a date range.');
@@ -1006,7 +1027,6 @@
             days.forEach(day => dayUsage.set(day.getTime(), 0));
             let dayCursor = 0;
 
-            // --- PASS 1: Give every site one trip (breadth-first for fairness) ---
             for (const site of allSitesSorted) {
                 if (currentAmount >= target) break;
 
@@ -1029,7 +1049,6 @@
                 }
             }
 
-            // --- PASS 2: Top-up with a greedy round-robin if target not met ---
             if (currentAmount < target) {
                 let tripCounter = 0;
                 const safetyLimit = days.length * allSitesSorted.length * maxTripsPerDay;
@@ -1124,50 +1143,157 @@
             alertDiv.style.display = 'block';
         }
 
-        function exportToCsv() {
-            const claimEntries = [];
-            const mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
-
+        function getClaimEntries() {
+            const entries = [];
             sites.forEach(site => {
                 site.allocation.forEach(alloc => {
                     if (alloc.trips > 0) {
-                        const totalDistance = site.distance * alloc.trips;
-                        const totalAmount = totalDistance * mileageRate;
-                        claimEntries.push({
-                            date: alloc.date,
-                            siteName: site.isAdjusted ? `${site.name} (Adjusted)` : site.name,
-                            siteAddress: site.address,
-                            trips: alloc.trips,
-                            distancePerTrip: site.distance.toFixed(2),
-                            totalDistanceForDay: totalDistance.toFixed(2),
-                            mileageRate: mileageRate.toFixed(2),
-                            totalAmountForDay: totalAmount.toFixed(2)
-                        });
+                        for (let i = 0; i < alloc.trips; i++) {
+                             entries.push({
+                                date: alloc.date,
+                                siteName: site.name,
+                                siteAddress: site.address,
+                                keywords: site.keywords
+                            });
+                        }
                     }
                 });
             });
+            entries.sort((a, b) => a.date - b.date);
+            return entries;
+        }
 
-            if (claimEntries.length === 0) {
-                alert('No claim entries to export. Please allocate some trips first.');
-                return;
+        function generateWorkDescription(siteName, date, keywords) {
+            const lexicon = {
+                'default': {
+                    actionVerbs: ['Investigated and resolved', 'Performed maintenance on', 'Conducted a diagnostic check of', 'Troubleshot connectivity issues with', 'Audited the setup of'],
+                    itObjects: ['the network switch', 'a core router', 'the firewall appliance', 'a wireless access point', 'the structured cabling rack', 'a user workstation', 'the VoIP phone system'],
+                    purposes: ['to restore full network connectivity', 'to improve overall system performance', 'to address a user-reported fault ticket', 'to enhance network security'],
+                    specifics: ['caused by a misconfigured VLAN.', 'related to a failing power supply unit.', 'due to outdated firmware.', 'linked to a DNS resolution failure.']
+                },
+                'kaseya': {
+                    actionVerbs: ['Deployed the VSA agent to', 'Troubleshot a failed script on', 'Updated the agent procedure for', 'Generated a compliance report from', 'Patched vulnerabilities on'],
+                    itObjects: ['the endpoint servers', 'a group of user workstations', 'the domain controller', 'critical infrastructure nodes', 'the remote management console'],
+                    purposes: ['to ensure 100% agent compliance', 'to automate a recurring maintenance task', 'as part of the monthly patch management cycle', 'to resolve a security audit finding'],
+                    specifics: ['related to agent communication credentials.', 'caused by a syntax error in the script.', 'due to a change in security policy.', 'identified by the remote monitoring system.']
+                },
+                'network': {
+                    actionVerbs: ['Upgraded the firmware on', 'Replaced a faulty', 'Re-cabled the', 'Reconfigured the VLANs for', 'Installed a new'],
+                    itObjects: ['core network switch', 'edge router', 'PoE access point', 'patch panel connection', 'fiber optic transceiver', 'branch office firewall'],
+                    purposes: ['to expand network capacity', 'to resolve intermittent packet loss', 'to segregate guest and corporate traffic', 'to establish a site-to-site VPN tunnel'],
+                    specifics: ['following a broadcast storm analysis.', 'after detecting high latency on the link.', 'to comply with the new network topology diagram.', 'which was causing DHCP scope exhaustion.']
+                },
+                'server': {
+                    actionVerbs: ['Installed Windows updates on', 'Replaced a failed hard drive in', 'Migrated a virtual machine on', 'Monitored the resource utilization of', 'Performed a security audit on'],
+                    itObjects: ['the primary domain controller', 'the file server RAID array', 'the VMware ESXi host', 'the application database server', 'the physical rack-mounted server'],
+                    purposes: ['as part of scheduled server maintenance', 'to prevent data loss and restore redundancy', 'to balance computing workloads', 'to investigate performance degradation'],
+                    specifics: ['identified in the system event logs.', 'due to a predictive drive failure alert.', 'to prepare for a hardware decommissioning.', 'which was approaching its CPU capacity limits.']
+                }
+            };
+
+            const getRandomItem = (arr) => arr[Math.floor(Math.random() * arr.length)];
+            
+            const lowerKeywords = (keywords || '').toLowerCase();
+            let selectedCategory = 'default';
+
+            for (const key in lexicon) {
+                if (key !== 'default' && lowerKeywords.includes(key)) {
+                    selectedCategory = key;
+                    break;
+                }
             }
 
-            claimEntries.sort((a, b) => a.date - b.date);
+            const vocab = lexicon[selectedCategory];
+            const action = getRandomItem(vocab.actionVerbs);
+            const obj = getRandomItem(vocab.itObjects);
+            const purpose = getRandomItem(vocab.purposes);
+            const specific = getRandomItem(vocab.specifics);
+            
+            return `${action} ${obj} at ${siteName}. This was necessary ${purpose}, with the issue ${specific}`;
+        }
 
-            const headers = [
-                'Date', 'Site Name', 'Site Address', 'Trips', 
-                'Distance per Trip (km)', 'Total Distance for Day (km)', 
-                'Mileage Rate (RM/km)', 'Total Amount for Day (RM)'
-            ];
+        function generateAllDescriptions() {
+            generatedDescriptions = [];
+            const claimEntries = getClaimEntries();
 
-            const csvRows = claimEntries.map(entry => {
-                // MODIFIED: Use toLocaleDateString() for user-friendly format
-                const formattedDate = entry.date.toLocaleDateString();
-                const row = [
-                    formattedDate, entry.siteName, entry.siteAddress, entry.trips,
-                    entry.distancePerTrip, entry.totalDistanceForDay,
-                    entry.mileageRate, entry.totalAmountForDay
-                ];
+            if (claimEntries.length === 0) {
+                alert('No allocated trips found. Please allocate trips before generating descriptions.');
+                return;
+            }
+            
+            claimEntries.forEach(entry => {
+                entry.workDescription = generateWorkDescription(entry.siteName, entry.date, entry.keywords);
+                generatedDescriptions.push(entry);
+            });
+            
+            displayClaimDetails();
+            showAllocationAlert('success', `Successfully generated ${generatedDescriptions.length} context-aware work descriptions!`);
+        }
+
+        function displayClaimDetails() {
+            const container = document.getElementById('claimDetailsLog');
+            if (generatedDescriptions.length === 0) {
+                container.innerHTML = '';
+                return;
+            }
+            let html = `
+                <div class="section-title">📝 Generated Claim Details</div>
+                <style>
+                    .claim-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+                    .claim-table th, .claim-table td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 14px; }
+                    .claim-table th { font-weight: 600; }
+                    .claim-table tr:last-child td { border-bottom: none; }
+                </style>
+                <table class="claim-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Site Name</th>
+                            <th>Generated Work Description</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            generatedDescriptions.forEach(entry => {
+                html += `
+                    <tr>
+                        <td>${entry.date.toLocaleDateString()}</td>
+                        <td>${entry.siteName}</td>
+                        <td>${entry.workDescription}</td>
+                    </tr>
+                `;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+
+        function exportToCsv() {
+            if (generatedDescriptions.length === 0) {
+                generateAllDescriptions();
+                if (generatedDescriptions.length === 0) {
+                    alert('No claim entries to export. Please allocate some trips first.');
+                    return;
+                }
+            }
+            
+            const mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
+            const siteInfo = new Map(sites.map(s => [s.name, { distance: s.distance, address: s.address, isAdjusted: s.isAdjusted }]));
+
+            const csvRowsData = generatedDescriptions.map(entry => {
+                const info = siteInfo.get(entry.siteName) || { distance: 0, address: '', isAdjusted: false };
+                return {
+                    date: entry.date,
+                    siteName: info.isAdjusted ? `${entry.siteName} (Adjusted)` : entry.siteName,
+                    siteAddress: info.address,
+                    distance: info.distance.toFixed(2),
+                    amount: (info.distance * mileageRate).toFixed(2),
+                    workDescription: entry.workDescription
+                };
+            });
+
+            const headers = [ 'Date', 'Site Name', 'Site Address', 'Round-trip Distance (km)', 'Amount (RM)', 'Work Description' ];
+            const csvRows = csvRowsData.map(entry => {
+                const row = [ entry.date.toLocaleDateString(), entry.siteName, entry.siteAddress, entry.distance, entry.amount, entry.workDescription ];
                 return row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',');
             });
 
@@ -1177,13 +1303,12 @@
             const url = URL.createObjectURL(blob);
             const today = new Date().toISOString().split('T')[0];
             link.setAttribute('href', url);
-            link.setAttribute('download', `mileage-claim-${today}.csv`);
+            link.setAttribute('download', `mileage-claim-with-descriptions-${today}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
         
-        // ADDED: New function to export all data as a JSON file
         function exportToJson() {
             if (sites.length === 0 && !config.startPoint) {
                 alert("No data to export.");
@@ -1270,11 +1395,15 @@
                             <div class="site-name">${displayName}</div>
                             <div class="site-address">${site.address}</div>
                             <div class="site-distance">${site.distance > 0 ? `${site.distance.toFixed(2)} km (round-trip)` : '<span class="loading"></span>'}</div>
-                            <div class="form-group" style="margin-top: 10px; margin-bottom: 0;">
+                            <div class="form-group" style="margin-top: 10px; margin-bottom: 5px;">
                                 <label class="checkbox-label">
                                     <input type="checkbox" class="single-trip-toggle" data-site-id="${site.id}" ${site.isSingleTrip ? 'checked' : ''}>
                                     <span>Single Trip Only</span>
                                 </label>
+                            </div>
+                             <div class="form-group" style="margin-top: 10px; margin-bottom: 0;">
+                                <label style="font-size: 12px; margin-bottom: 4px;">Project Keywords:</label>
+                                <input type="text" class="site-keywords-input" placeholder="e.g., Kaseya, network, server" value="${site.keywords || ''}" data-site-id="${site.id}">
                             </div>
                         </div>
                         <button class="remove-site-btn" data-site-id="${site.id}">✕</button>
