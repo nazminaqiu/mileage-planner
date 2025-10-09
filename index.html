@@ -1166,28 +1166,28 @@
         function generateWorkDescription(siteName, date, keywords) {
             const lexicon = {
                 'default': {
-                    actionVerbs: ['Investigated and resolved', 'Performed maintenance on', 'Conducted a diagnostic check of', 'Troubleshot connectivity issues with', 'Audited the setup of'],
-                    itObjects: ['the network switch', 'a core router', 'the firewall appliance', 'a wireless access point', 'the structured cabling rack', 'a user workstation', 'the VoIP phone system'],
-                    purposes: ['to restore full network connectivity', 'to improve overall system performance', 'to address a user-reported fault ticket', 'to enhance network security'],
-                    specifics: ['caused by a misconfigured VLAN.', 'related to a failing power supply unit.', 'due to outdated firmware.', 'linked to a DNS resolution failure.']
+                    actionVerbs: ['Sorted out', 'Had a look at', 'Fixed up', 'Ran a check on', 'Tinkered with'],
+                    itObjects: ['the main switch', 'a router', 'the office firewall', 'a Wi-Fi point', 'the server rack', 'a user\'s PC', 'the phone system'],
+                    purposes: ['to get everyone back online', 'to speed things up a bit', 'because someone logged a ticket', 'to stop any security issues'],
+                    specifics: ['a wonky VLAN setting.', 'a power supply that was giving up.', 'some really old firmware.', 'a simple DNS mix-up.']
                 },
                 'kaseya': {
-                    actionVerbs: ['Deployed the VSA agent to', 'Troubleshot a failed script on', 'Updated the agent procedure for', 'Generated a compliance report from', 'Patched vulnerabilities on'],
-                    itObjects: ['the endpoint servers', 'a group of user workstations', 'the domain controller', 'critical infrastructure nodes', 'the remote management console'],
-                    purposes: ['to ensure 100% agent compliance', 'to automate a recurring maintenance task', 'as part of the monthly patch management cycle', 'to resolve a security audit finding'],
-                    specifics: ['related to agent communication credentials.', 'caused by a syntax error in the script.', 'due to a change in security policy.', 'identified by the remote monitoring system.']
+                    actionVerbs: ['Pushed the VSA agent to', 'Fixed a broken script on', 'Updated a script for', 'Pulled a report from', 'Ran patches on'],
+                    itObjects: ['the servers', 'a bunch of PCs', 'the main controller', 'the important gear', 'the remote tool'],
+                    purposes: ['to get all the agents installed', 'to get a maintenance job running automatically', 'for the usual monthly updates', 'to clear a security warning'],
+                    specifics: ['the agent just couldnt log in right.', 'a typo in the script.', 'a new security rule we had to follow.', 'an alert from the monitoring system.']
                 },
                 'network': {
-                    actionVerbs: ['Upgraded the firmware on', 'Replaced a faulty', 'Re-cabled the', 'Reconfigured the VLANs for', 'Installed a new'],
-                    itObjects: ['core network switch', 'edge router', 'PoE access point', 'patch panel connection', 'fiber optic transceiver', 'branch office firewall'],
-                    purposes: ['to expand network capacity', 'to resolve intermittent packet loss', 'to segregate guest and corporate traffic', 'to establish a site-to-site VPN tunnel'],
-                    specifics: ['following a broadcast storm analysis.', 'after detecting high latency on the link.', 'to comply with the new network topology diagram.', 'which was causing DHCP scope exhaustion.']
+                    actionVerbs: ['Updated the firmware on', 'Swapped out a dead', 'Cleaned up the cabling for', 'Changed the VLANs on', 'Popped in a new'],
+                    itObjects: ['the main switch', 'an edge router', 'a Wi-Fi AP', 'a patch panel port', 'a fiber connector', 'the office firewall'],
+                    purposes: ['so the network can handle more traffic', 'to stop the connection from dropping', 'to keep guest Wi-Fi separate', 'to link up another office'],
+                    specifics: ['the network was just screaming with traffic.', 'the connection was super slow.', 'to match the new network map.', 'it ran out of IP addresses to give.']
                 },
                 'server': {
-                    actionVerbs: ['Installed Windows updates on', 'Replaced a failed hard drive in', 'Migrated a virtual machine on', 'Monitored the resource utilization of', 'Performed a security audit on'],
-                    itObjects: ['the primary domain controller', 'the file server RAID array', 'the VMware ESXi host', 'the application database server', 'the physical rack-mounted server'],
-                    purposes: ['as part of scheduled server maintenance', 'to prevent data loss and restore redundancy', 'to balance computing workloads', 'to investigate performance degradation'],
-                    specifics: ['identified in the system event logs.', 'due to a predictive drive failure alert.', 'to prepare for a hardware decommissioning.', 'which was approaching its CPU capacity limits.']
+                    actionVerbs: ['Ran Windows updates on', 'Swapped a bad hard drive in', 'Moved a VM over to', 'Checked the usage on', 'Did a quick security check on'],
+                    itObjects: ['the main domain controller', 'the file server', 'the VMware host', 'the database server', 'the physical server box'],
+                    purposes: ['for the usual server TLC', 'to make sure no data was lost', 'to spread the load a bit', 'because things were running slow'],
+                    specifics: ['the event logs were full of errors.', 'we got an alert the drive was about to die.', 'to get ready to retire some old kit.', 'the CPU was maxing out.']
                 }
             };
 
@@ -1209,7 +1209,7 @@
             const purpose = getRandomItem(vocab.purposes);
             const specific = getRandomItem(vocab.specifics);
             
-            return `${action} ${obj} at ${siteName}. This was necessary ${purpose}, with the issue ${specific}`;
+            return `Popped over to ${siteName} to ${action.toLowerCase()} ${obj}. It was needed ${purpose}, and it turned out the problem was just ${specific.toLowerCase()}`;
         }
 
         function generateAllDescriptions() {
