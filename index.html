@@ -98,6 +98,16 @@
             align-items: center;
             gap: 8px;
         }
+        
+        .subsection-title {
+            font-size: 16px;
+            font-weight: 600;
+            margin-top: 20px;
+            margin-bottom: 12px;
+            border-bottom: 1px solid var(--border-color);
+            padding-bottom: 8px;
+        }
+
 
         .status-badge {
             display: inline-block;
@@ -442,6 +452,25 @@
         .remove-site-btn:hover {
             background: #bb2d3b;
         }
+        
+        .claim-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        .claim-table th, .claim-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 14px;
+        }
+        .claim-table th {
+            font-weight: 600;
+            background-color: var(--bg-secondary);
+        }
+        .claim-table tr:last-child td {
+            border-bottom: none;
+        }
 
         @media (max-width: 768px) {
             .header {
@@ -558,7 +587,7 @@
             </div>
             
             <div class="form-group">
-                <label>Project Keywords (optional)</label>
+                <label>Project Keywords (optional for description generator)</label>
                 <input type="text" id="siteKeywords" placeholder="e.g., Kaseya VSA, network upgrade, server maintenance">
             </div>
 
@@ -585,15 +614,6 @@
         <!-- Summary -->
         <div class="section">
             <div class="section-title">📊 Summary</div>
-
-            <div class="btn-group" style="margin-top: 0; margin-bottom: 24px;">
-                <button id="exportCsvBtn" class="btn btn-secondary">📄 Export to CSV</button>
-                <button id="exportJsonBtn" class="btn btn-secondary">💾 Export to JSON</button>
-                <button id="generateDescBtn" class="btn btn-primary">🤖 Generate Descriptions</button>
-            </div>
-            
-            <div id="claimDetailsLog" style="margin-top: 20px;"></div>
-
             <div class="summary-grid">
                 <div class="summary-card">
                     <div class="summary-label">Total Distance</div>
@@ -616,6 +636,61 @@
                 </div>
             </div>
         </div>
+        
+        <!-- Overtime & Work Description Generator -->
+        <div class="section">
+            <div class="section-title">🤖 Overtime & Work Description Generator</div>
+            
+            <div class="generator-controls">
+                <div class="subsection-title">Method 1: Generate from Planner Trips</div>
+                <div class="alert alert-info" style="margin-top: 12px;">
+                    This will use the allocated trips from the "Project Sites" section above. Add keywords to each site for more specific descriptions.
+                </div>
+                <button id="generateDescBtn" class="btn btn-primary">✨ Generate from Planner</button>
+
+                <div class="subsection-title">Method 2: Process External OT File</div>
+                 <div class="alert alert-info" style="margin-top: 12px;">
+                    Upload a JSON file from your other OT Generator app to process its entries.
+                </div>
+                <div class="form-group">
+                    <label>Upload Overtime JSON File</label>
+                    <input type="file" id="jsonFileInput" accept=".json" class="form-control">
+                </div>
+                <button id="processJsonFileBtn" class="btn btn-success">PROCESS UPLOADED JSON</button>
+            </div>
+            
+            <hr style="margin: 32px 0; border: none; border-top: 1px solid var(--border-color);">
+            
+            <div class="section-title">Generated Results</div>
+            
+            <!-- Global action button for exporting the planner configuration -->
+            <div class="btn-group" style="margin-top: 0; margin-bottom: 16px;">
+                 <button id="exportJsonBtn" class="btn btn-secondary">💾 Export Planner Config (JSON)</button>
+            </div>
+
+            <!-- Container for Planner Results -->
+            <div id="plannerResultsContainer">
+                <div class="subsection-title">Results from Planner</div>
+                <div class="btn-group" style="margin-top:0; margin-bottom: 15px;">
+                    <button id="exportPlannerCsvBtn" class="btn btn-secondary">📄 Export Planner Results to CSV</button>
+                </div>
+                <div id="plannerGeneratorResults">
+                    <p>Planner-generated descriptions will appear here.</p>
+                </div>
+            </div>
+
+            <!-- Container for Uploaded JSON Results -->
+            <div id="jsonResultsContainer" style="margin-top: 24px;">
+                <div class="subsection-title">Results from Uploaded OT File</div>
+                 <div class="btn-group" style="margin-top:0; margin-bottom: 15px;">
+                    <button id="exportFileCsvBtn" class="btn btn-secondary">📄 Export OT File Results to CSV</button>
+                </div>
+                <div id="jsonGeneratorResults">
+                    <p>Uploaded file descriptions will appear here.</p>
+                </div>
+            </div>
+        </div>
+
     </div>
     
     <script type="module">
@@ -652,7 +727,9 @@
         };
         let apiKey = '';
         let apiValidated = false;
-        let generatedDescriptions = [];
+        
+        let plannerGeneratedData = [];
+        let fileGeneratedData = [];
 
         function toFirestore(data) {
             const firestoreData = { ...data };
@@ -696,6 +773,24 @@
              catch(e) { console.error("Error saving site:", e); }
         }
 
+        async function savePlannerResults(data) {
+            try {
+                const dataToSave = data.map(d => ({...d, date: d.date.toISOString()}));
+                await setDoc(doc(db, 'generatedResults', 'planner'), { results: dataToSave });
+            } catch (e) {
+                console.error("Error saving planner results:", e);
+            }
+        }
+
+        async function saveFileResults(data) {
+            try {
+                const dataToSave = data.map(d => ({...d, date: d.date.toISOString()}));
+                await setDoc(doc(db, 'generatedResults', 'file'), { results: dataToSave });
+            } catch (e) {
+                console.error("Error saving file results:", e);
+            }
+        }
+
         async function loadData() {
             try {
                 const configSnap = await getDoc(doc(db, 'plannerData', 'config'));
@@ -714,6 +809,19 @@
                 sites = sitesSnap.docs.map(d => fromFirestore(d.data()));
                 renderSites();
                 updateSummary();
+
+                const plannerResultsSnap = await getDoc(doc(db, 'generatedResults', 'planner'));
+                if (plannerResultsSnap.exists()) {
+                    plannerGeneratedData = plannerResultsSnap.data().results.map(d => ({...d, date: new Date(d.date)}));
+                    displayPlannerResults(plannerGeneratedData);
+                }
+
+                const fileResultsSnap = await getDoc(doc(db, 'generatedResults', 'file'));
+                if (fileResultsSnap.exists()) {
+                    fileGeneratedData = fileResultsSnap.data().results.map(d => ({...d, date: new Date(d.date)}));
+                    displayUploadedFileResults(fileGeneratedData);
+                }
+
             } catch(e) { console.error("Error loading data:", e); }
         }
 
@@ -740,10 +848,13 @@
             document.getElementById('includeSunday').addEventListener('change', saveConfig);
             document.getElementById('mileageRate').addEventListener('input', updateSummary);
             document.getElementById('targetAmount').addEventListener('input', updateSummary);
-            document.getElementById('exportCsvBtn').addEventListener('click', exportToCsv);
             document.getElementById('exportJsonBtn').addEventListener('click', exportToJson);
-            document.getElementById('generateDescBtn').addEventListener('click', generateAllDescriptions);
+            document.getElementById('generateDescBtn').addEventListener('click', generateAllDescriptionsFromPlanner);
+            document.getElementById('processJsonFileBtn').addEventListener('click', processUploadedJsonFile);
             document.getElementById('meetTargetBtn').addEventListener('click', meetTarget);
+            document.getElementById('exportPlannerCsvBtn').addEventListener('click', exportPlannerResultsToCsv);
+            document.getElementById('exportFileCsvBtn').addEventListener('click', exportFileResultsToCsv);
+
 
             const sitesList = document.getElementById('sitesList');
             sitesList.addEventListener('click', async (e) => {
@@ -1114,8 +1225,12 @@
                 allocateBtn.classList.add('btn-success');
                 
                 document.getElementById('allocationAlert').style.display = 'none';
-                generatedDescriptions = [];
-                displayClaimDetails();
+                plannerGeneratedData = [];
+                fileGeneratedData = [];
+                await savePlannerResults([]);
+                await saveFileResults([]);
+                document.getElementById('plannerGeneratorResults').innerHTML = '<p>Planner-generated descriptions will appear here.</p>';
+                document.getElementById('jsonGeneratorResults').innerHTML = '<p>Uploaded file descriptions will appear here.</p>';
 
                 renderSites();
                 updateSummary();
@@ -1147,7 +1262,7 @@
             alertDiv.style.display = 'block';
         }
 
-        function getClaimEntries() {
+        function getClaimEntriesFromPlanner() {
             const entries = [];
             sites.forEach(site => {
                 site.allocation.forEach(alloc => {
@@ -1157,7 +1272,9 @@
                                 date: alloc.date,
                                 siteName: site.name,
                                 siteAddress: site.address,
-                                keywords: site.keywords
+                                keywords: site.keywords,
+                                distance: site.distance,
+                                isAdjusted: site.isAdjusted
                             });
                         }
                     }
@@ -1166,8 +1283,10 @@
             entries.sort((a, b) => a.date - b.date);
             return entries;
         }
+        
+        // --- DESCRIPTION GENERATOR LOGIC ---
 
-        function generateWorkDescription(siteName, date, keywords) {
+        function generateDescriptionFromPlanner(siteName, keywords) {
             const lexicon = {
                 'default': {
                     actionVerbs: ['Sorted out', 'Fixed up', 'Ran a check on', 'Reconfigured', 'Tinkered with'],
@@ -1192,6 +1311,12 @@
                     itObjects: ['the domain controller', 'the file server', 'a different VMware host', 'the database server', 'the physical server'],
                     purposes: ['perform scheduled server maintenance', 'prevent data loss', 'better balance the load', 'figure out why it was running slow'],
                     diagnoses: ['errors in the system event logs', 'a predictive drive failure alert', 'preparation for retiring old hardware', 'the CPU hitting 100%']
+                },
+                'siem': {
+                    actionVerbs: ['Developed API endpoints for', 'Investigated a performance bottleneck in', 'Deployed updates to', 'Refactored the'],
+                    itObjects: ['the new two-factor authentication module', 'the API gateway', 'the reporting engine', 'the authentication service'],
+                    purposes: ['enhance system security', 'improve overall performance', 'release a new feature', 'address a critical bug'],
+                    diagnoses: ['an inefficient database query', 'a memory leak in the service', 'a misconfiguration in the deployment script', 'an issue with a third-party dependency']
                 }
             };
 
@@ -1225,88 +1350,188 @@
             return selectedTemplate();
         }
 
-        function generateAllDescriptions() {
-            generatedDescriptions = [];
-            const claimEntries = getClaimEntries();
+        function generateDescriptionFromRemark(originalRemark) {
+            const lexicon = {
+                'default': {
+                    actionVerbs: ['Sorted out', 'Fixed up', 'Ran a check on', 'Reconfigured', 'Tinkered with'],
+                    itObjects: ['the main switch', 'a router', 'the office firewall', 'a Wi-Fi point', 'the server rack', 'a user\'s PC', 'the phone system'],
+                    purposes: ['get everyone back online', 'speed things up a bit', 'resolve a user ticket', 'patch a security hole'],
+                    diagnoses: ['a misconfigured VLAN', 'a faulty power supply', 'outdated firmware', 'a DNS issue', 'a loose cable']
+                },
+                'kaseya': {
+                    actionVerbs: ['Pushed the VSA agent to', 'Fixed a broken script on', 'Updated a script for', 'Pulled a report from', 'Ran patches on'],
+                    itObjects: ['the servers', 'a bunch of PCs', 'the domain controller', 'the critical gear', 'the remote management tool'],
+                    purposes: ['ensure all agents were installed', 'automate a maintenance job', 'complete the monthly patch cycle', 'clear a security warning'],
+                    diagnoses: ['an agent login issue', 'a typo in the script', 'a new security policy requirement', 'an alert from the monitoring system']
+                },
+                'network': {
+                    actionVerbs: ['Updated the firmware on', 'Swapped out a faulty', 'Tidied up the cabling for', 'Changed the VLANs on', 'Installed a new'],
+                    itObjects: ['the core switch', 'an edge router', 'a Wi-Fi AP', 'a patch panel port', 'a fiber transceiver', 'the branch firewall'],
+                    purposes: ['handle more traffic', 'fix a dropping connection', 'separate guest and staff Wi-Fi', 'link up with another office'],
+                    diagnoses: ['a broadcast storm', 'high latency on the link', 'a mismatch with the network diagram', 'the DHCP server running out of IPs']
+                },
+                'server': {
+                    actionVerbs: ['Ran Windows updates on', 'Replaced a failed hard drive in', 'Moved a VM to', 'Checked resource usage on', 'Performed a quick security audit on'],
+                    itObjects: ['the domain controller', 'the file server', 'a different VMware host', 'the database server', 'the physical server'],
+                    purposes: ['perform scheduled server maintenance', 'prevent data loss', 'better balance the load', 'figure out why it was running slow'],
+                    diagnoses: ['errors in the system event logs', 'a predictive drive failure alert', 'preparation for retiring old hardware', 'the CPU hitting 100%']
+                },
+                'siem': {
+                    actionVerbs: ['Developed API endpoints for', 'Investigated a performance bottleneck in', 'Deployed updates to', 'Refactored the'],
+                    itObjects: ['the new two-factor authentication module', 'the API gateway', 'the reporting engine', 'the authentication service'],
+                    purposes: ['enhance system security', 'improve overall performance', 'release a new feature', 'address a critical bug'],
+                    diagnoses: ['an inefficient database query', 'a memory leak in the service', 'a misconfiguration in the deployment script', 'an issue with a third-party dependency']
+                }
+            };
 
+            const getRandomItem = (arr) => arr[Math.floor(Math.random() * arr.length)];
+            
+            const parts = originalRemark.split(' - ');
+            const siteName = parts[0] || 'the site';
+            const keywords = originalRemark.toLowerCase();
+
+            let selectedCategory = 'default';
+            for (const key in lexicon) {
+                if (key !== 'default' && keywords.includes(key)) {
+                    selectedCategory = key;
+                    break;
+                }
+            }
+
+            const vocab = lexicon[selectedCategory];
+            const action = getRandomItem(vocab.actionVerbs);
+            const obj = getRandomItem(vocab.itObjects);
+            const purpose = getRandomItem(vocab.purposes);
+            const diagnosis = getRandomItem(vocab.diagnoses);
+
+            const templates = [
+                () => `${action} ${obj} at ${siteName} to ${purpose}. The problem was traced back to ${diagnosis}.`,
+                () => `At ${siteName}, worked on ${obj} in order to ${purpose}. Found that the issue was caused by ${diagnosis}.`,
+                () => `A visit to ${siteName} was needed to address an issue with ${obj}. The cause was simply ${diagnosis}, and the fix was implemented to ${purpose}.`,
+                () => `To ${purpose}, ${action.toLowerCase()} ${obj} at ${siteName}. It was discovered that ${diagnosis} was the culprit.`,
+                () => `Worked on a problem with ${obj} at ${siteName}. It was a case of ${diagnosis}, and the work was completed so we could ${purpose}.`
+            ];
+
+            const selectedTemplate = getRandomItem(templates);
+            return selectedTemplate();
+        }
+
+        function generateAllDescriptionsFromPlanner() {
+            const claimEntries = getClaimEntriesFromPlanner();
             if (claimEntries.length === 0) {
                 alert('No allocated trips found. Please allocate trips before generating descriptions.');
                 return;
             }
             
-            claimEntries.forEach(entry => {
-                entry.workDescription = generateWorkDescription(entry.siteName, entry.date, entry.keywords);
-                generatedDescriptions.push(entry);
-            });
+            plannerGeneratedData = claimEntries.map(entry => ({
+                ...entry,
+                workDescription: generateDescriptionFromPlanner(entry.siteName, entry.keywords)
+            }));
             
-            displayClaimDetails();
-            showAllocationAlert('success', `Successfully generated ${generatedDescriptions.length} unique work descriptions!`);
+            savePlannerResults(plannerGeneratedData);
+            displayPlannerResults(plannerGeneratedData);
+            showAllocationAlert('success', `Successfully generated ${plannerGeneratedData.length} unique work descriptions from the planner!`);
         }
 
-        function displayClaimDetails() {
-            const container = document.getElementById('claimDetailsLog');
-            if (generatedDescriptions.length === 0) {
-                container.innerHTML = '';
+        function processUploadedJsonFile() {
+            const fileInput = document.getElementById('jsonFileInput');
+            if (fileInput.files.length === 0) {
+                alert('Please select a JSON file first.');
+                return;
+            }
+
+            const file = fileInput.files[0];
+            const reader = new FileReader();
+
+            reader.onload = async (event) => {
+                try {
+                    const entries = JSON.parse(event.target.result);
+                    
+                    let processedData = entries.map(entry => ({
+                        date: new Date(entry.date),
+                        originalRemark: entry.remarks,
+                        workDescription: generateDescriptionFromRemark(entry.remarks)
+                    }));
+
+                    processedData.sort((a, b) => a.date - b.date);
+                    
+                    fileGeneratedData = processedData;
+                    await saveFileResults(fileGeneratedData);
+                    displayUploadedFileResults(fileGeneratedData);
+                    showAllocationAlert('success', `Successfully processed ${fileGeneratedData.length} entries from the uploaded file!`);
+
+                } catch (e) {
+                    alert('Error parsing JSON file. Please ensure it is valid.');
+                    console.error(e);
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        function displayPlannerResults(data) {
+            const container = document.getElementById('plannerGeneratorResults');
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p>No descriptions generated.</p>';
                 return;
             }
             let html = `
-                <div class="section-title">📝 Generated Claim Details</div>
-                <style>
-                    .claim-table { width: 100%; border-collapse: collapse; margin-top: 15px; }
-                    .claim-table th, .claim-table td { padding: 10px; text-align: left; border-bottom: 1px solid var(--border-color); font-size: 14px; }
-                    .claim-table th { font-weight: 600; }
-                    .claim-table tr:last-child td { border-bottom: none; }
-                </style>
                 <table class="claim-table">
-                    <thead>
-                        <tr>
-                            <th>Date</th>
-                            <th>Site Name</th>
-                            <th>Generated Work Description</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-            `;
-            generatedDescriptions.forEach(entry => {
+                    <thead><tr><th>Date</th><th>Site Name</th><th>Generated Work Description</th></tr></thead>
+                    <tbody>`;
+            data.forEach(entry => {
                 html += `
                     <tr>
                         <td>${entry.date.toLocaleDateString()}</td>
                         <td>${entry.siteName}</td>
                         <td>${entry.workDescription}</td>
-                    </tr>
-                `;
+                    </tr>`;
             });
             html += '</tbody></table>';
             container.innerHTML = html;
         }
 
-        function exportToCsv() {
-            if (generatedDescriptions.length === 0) {
-                generateAllDescriptions();
-                if (generatedDescriptions.length === 0) {
-                    alert('No claim entries to export. Please allocate some trips first.');
-                    return;
-                }
+        function displayUploadedFileResults(data) {
+            const container = document.getElementById('jsonGeneratorResults');
+            if (!data || data.length === 0) {
+                container.innerHTML = '<p>No descriptions generated.</p>';
+                return;
+            }
+            let html = `
+                <table class="claim-table">
+                     <thead><tr><th>Date</th><th>Original Remark</th><th>Generated Remark</th></tr></thead>
+                    <tbody>`;
+            data.forEach(entry => {
+                const dateObj = entry.date instanceof Date ? entry.date : new Date(entry.date);
+                const formattedDate = !isNaN(dateObj) ? dateObj.toLocaleDateString() : 'Invalid Date';
+
+                html += `
+                    <tr>
+                        <td>${formattedDate}</td>
+                        <td>${entry.originalRemark}</td>
+                        <td>${entry.workDescription}</td>
+                    </tr>`;
+            });
+            html += '</tbody></table>';
+            container.innerHTML = html;
+        }
+        
+        function exportPlannerResultsToCsv() {
+            if (plannerGeneratedData.length === 0) {
+                alert('No planner results to export. Please generate them first.');
+                return;
             }
             
             const mileageRate = parseFloat(document.getElementById('mileageRate').value) || 0;
-            const siteInfo = new Map(sites.map(s => [s.name, { distance: s.distance, address: s.address, isAdjusted: s.isAdjusted }]));
-
-            const csvRowsData = generatedDescriptions.map(entry => {
-                const info = siteInfo.get(entry.siteName) || { distance: 0, address: '', isAdjusted: false };
-                return {
-                    date: entry.date,
-                    siteName: info.isAdjusted ? `${entry.siteName} (Adjusted)` : entry.siteName,
-                    siteAddress: info.address,
-                    distance: info.distance.toFixed(2),
-                    amount: (info.distance * mileageRate).toFixed(2),
-                    workDescription: entry.workDescription
-                };
-            });
-
             const headers = [ 'Date', 'Site Name', 'Site Address', 'Round-trip Distance (km)', 'Amount (RM)', 'Work Description' ];
-            const csvRows = csvRowsData.map(entry => {
-                const row = [ entry.date.toLocaleDateString(), entry.siteName, entry.siteAddress, entry.distance, entry.amount, entry.workDescription ];
+            const csvRows = plannerGeneratedData.map(entry => {
+                const row = [ 
+                    entry.date.toLocaleDateString(), 
+                    entry.isAdjusted ? `${entry.siteName} (Adjusted)` : entry.siteName,
+                    entry.siteAddress, 
+                    (entry.distance || 0).toFixed(2),
+                    ((entry.distance || 0) * mileageRate).toFixed(2),
+                    entry.workDescription 
+                ];
                 return row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',');
             });
 
@@ -1316,15 +1541,43 @@
             const url = URL.createObjectURL(blob);
             const today = new Date().toISOString().split('T')[0];
             link.setAttribute('href', url);
-            link.setAttribute('download', `mileage-claim-with-descriptions-${today}.csv`);
+            link.setAttribute('download', `planner-results-${today}.csv`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
         }
-        
+
+        function exportFileResultsToCsv() {
+            if (fileGeneratedData.length === 0) {
+                alert('No OT file results to export. Please process a file first.');
+                return;
+            }
+            
+            const headers = [ 'Date', 'Original Remark', 'Generated Remark' ];
+            const csvRows = fileGeneratedData.map(entry => {
+                const row = [ 
+                    entry.date.toLocaleDateString(),
+                    entry.originalRemark,
+                    entry.workDescription
+                ];
+                return row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',');
+            });
+
+            const csvContent = [headers.join(','), ...csvRows].join('\n');
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            const url = URL.createObjectURL(blob);
+            const today = new Date().toISOString().split('T')[0];
+            link.setAttribute('href', url);
+            link.setAttribute('download', `ot-file-results-${today}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
         function exportToJson() {
             if (sites.length === 0 && !config.startPoint) {
-                alert("No data to export.");
+                alert("No planner data to export.");
                 return;
             }
             const dataToExport = {
@@ -1338,7 +1591,7 @@
             const url = URL.createObjectURL(blob);
             const today = new Date().toISOString().split('T')[0];
             link.setAttribute('href', url);
-            link.setAttribute('download', `mileage-data-${today}.json`);
+            link.setAttribute('download', `mileage-planner-data-${today}.json`);
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
