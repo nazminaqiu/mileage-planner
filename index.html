@@ -476,6 +476,47 @@
             border-bottom: none;
         }
 
+        /* --- Styles for Tabbed Interface --- */
+        .tabs-container {
+            margin-top: 24px;
+        }
+
+        .tab-buttons {
+            display: flex;
+            border-bottom: 2px solid var(--border-color);
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            padding: 12px 20px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 15px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            position: relative;
+            top: 2px;
+            border-bottom: 2px solid transparent;
+        }
+        
+        .tab-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .tab-btn.active {
+            color: var(--accent-color);
+            border-bottom-color: var(--accent-color);
+        }
+
+        .tab-pane {
+            display: none; /* Hide panes by default */
+        }
+
+        .tab-pane.active {
+            display: block; /* Show the active pane */
+        }
+
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -664,30 +705,42 @@
             </div>
             
             <hr style="margin: 32px 0; border: none; border-top: 1px solid var(--border-color);">
-            
+
             <div class="section-title" id="generated-results-anchor">Generated Results</div>
             
-            <div class="btn-group" style="margin-top: 0; margin-bottom: 16px;">
+             <div class="btn-group" style="margin-top: 0; margin-bottom: 16px;">
                  <button id="exportJsonBtn" class="btn btn-secondary">💾 Export Planner Config (JSON)</button>
             </div>
 
-            <div id="plannerResultsContainer">
-                <div class="subsection-title">Results from Planner</div>
-                <div class="btn-group" style="margin-top:0; margin-bottom: 15px;">
-                    <button id="exportPlannerCsvBtn" class="btn btn-secondary">📄 Export Planner Results to CSV</button>
+            <!-- Tabbed Interface -->
+            <div class="tabs-container">
+                <!-- Tab Buttons -->
+                <div class="tab-buttons">
+                    <button class="tab-btn active" data-tab="planner">Results from Planner</button>
+                    <button class="tab-btn" data-tab="file">Results from Uploaded OT File</button>
                 </div>
-                <div id="plannerGeneratorResults">
-                    <p>Planner-generated descriptions will appear here.</p>
-                </div>
-            </div>
 
-            <div id="jsonResultsContainer" style="margin-top: 24px;">
-                <div class="subsection-title">Results from Uploaded OT File</div>
-                 <div class="btn-group" style="margin-top:0; margin-bottom: 15px;">
-                    <button id="exportFileCsvBtn" class="btn btn-secondary">📄 Export OT File Results to CSV</button>
-                </div>
-                <div id="jsonGeneratorResults">
-                    <p>Uploaded file descriptions will appear here.</p>
+                <!-- Tab Content Panes -->
+                <div class="tab-content">
+                    <!-- Planner Results Pane -->
+                    <div id="plannerPane" class="tab-pane active" data-tab="planner">
+                        <div class="btn-group" style="margin-top:0; margin-bottom: 15px;">
+                            <button id="exportPlannerCsvBtn" class="btn btn-secondary">📄 Export Planner Results to CSV</button>
+                        </div>
+                        <div id="plannerGeneratorResults">
+                            <p>Planner-generated descriptions will appear here.</p>
+                        </div>
+                    </div>
+
+                    <!-- Uploaded File Results Pane -->
+                    <div id="filePane" class="tab-pane" data-tab="file">
+                        <div class="btn-group" style="margin-top:0; margin-bottom: 15px;">
+                            <button id="exportFileCsvBtn" class="btn btn-secondary">📄 Export OT File Results to CSV</button>
+                        </div>
+                        <div id="jsonGeneratorResults">
+                            <p>Uploaded file descriptions will appear here.</p>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -780,6 +833,7 @@
                 await setDoc(doc(db, 'generatedResults', 'planner'), { results: dataToSave });
             } catch (e) {
                 console.error("Error saving planner results:", e);
+                alert(`Failed to save planner results to the database. Check the console (F12) for details. Error: ${e.message}`);
             }
         }
 
@@ -830,6 +884,7 @@
             loadTheme();
             initializeFlatpickr();
             setupEventListeners();
+            setupTabbedInterface();
             checkForAPIKey(); 
         });
 
@@ -884,6 +939,26 @@
             });
         }
         
+        function setupTabbedInterface() {
+            const tabContainer = document.querySelector('.tabs-container');
+            const tabButtons = tabContainer.querySelectorAll('.tab-btn');
+            const tabPanes = tabContainer.querySelectorAll('.tab-pane');
+
+            tabContainer.addEventListener('click', (e) => {
+                if (!e.target.matches('.tab-btn')) return;
+
+                const targetTab = e.target.dataset.tab;
+
+                tabButtons.forEach(btn => {
+                    btn.classList.toggle('active', btn.dataset.tab === targetTab);
+                });
+                
+                tabPanes.forEach(pane => {
+                    pane.classList.toggle('active', pane.dataset.tab === targetTab);
+                });
+            });
+        }
+
         async function toggleSiteSingleTripStatus(siteId, isSingleTrip) {
             const site = sites.find(s => s.id === siteId);
             if (!site) return;
