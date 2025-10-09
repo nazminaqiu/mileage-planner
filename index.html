@@ -574,7 +574,7 @@
         <!-- Allocation -->
         <div class="section">
             <div class="section-title">🎯 Smart Allocation</div>
-            <div id="allocationAlert"></div>
+            <div id="allocationAlert" style="display: none;"></div>
             <div class="btn-group">
                 <button id="autoAllocateBtn" class="btn btn-success">✨ Auto Allocate</button>
                 <button id="clearAllocationBtn" class="btn btn-secondary">🗑️ Clear All</button>
@@ -1112,6 +1112,10 @@
                 allocateBtn.innerHTML = '✨ Auto Allocate';
                 allocateBtn.classList.remove('btn-secondary');
                 allocateBtn.classList.add('btn-success');
+                
+                document.getElementById('allocationAlert').style.display = 'none';
+                generatedDescriptions = [];
+                displayClaimDetails();
 
                 renderSites();
                 updateSummary();
@@ -1209,7 +1213,7 @@
             const purpose = getRandomItem(vocab.purposes);
             const specific = getRandomItem(vocab.specifics);
             
-            return `${action} ${obj} at ${siteName}. This was done ${purpose}, and it turned out the problem was just ${specific.toLowerCase()}.`;
+            return `${action} ${obj} at ${siteName} ${purpose}. The root cause was just ${specific.toLowerCase()}.`;
         }
 
         function generateAllDescriptions() {
