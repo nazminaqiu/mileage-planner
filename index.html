@@ -583,7 +583,6 @@
 
             <div class="btn-group" style="margin-top: 0; margin-bottom: 24px;">
                 <button id="exportCsvBtn" class="btn btn-secondary">📄 Export to CSV</button>
-                <!-- ADDED: New button for JSON export -->
                 <button id="exportJsonBtn" class="btn btn-secondary">💾 Export to JSON</button>
             </div>
             
@@ -992,7 +991,7 @@
             let days = getDaysInRange();
             if (days.length === 0) return alert('No available days in range.');
             
-            shuffleArray(days); // Randomize day order for varied results on Relocate
+            shuffleArray(days);
 
             sites.forEach(site => {
                 site.allocation = [];
@@ -1060,7 +1059,6 @@
             sites.forEach(site => batch.set(doc(db, 'sites', String(site.id)), toFirestore(site)));
             await batch.commit();
             
-            // MODIFIED: Update button to "Relocate"
             const allocateBtn = document.getElementById('autoAllocateBtn');
             allocateBtn.innerHTML = '🔀 Relocate';
             allocateBtn.classList.remove('btn-success');
@@ -1091,7 +1089,6 @@
                     await calculateDistance(site);
                 }
                 
-                // MODIFIED: Revert button to "Auto Allocate"
                 const allocateBtn = document.getElementById('autoAllocateBtn');
                 allocateBtn.innerHTML = '✨ Auto Allocate';
                 allocateBtn.classList.remove('btn-secondary');
@@ -1164,7 +1161,8 @@
             ];
 
             const csvRows = claimEntries.map(entry => {
-                const formattedDate = entry.date.toISOString().split('T')[0];
+                // MODIFIED: Use toLocaleDateString() for user-friendly format
+                const formattedDate = entry.date.toLocaleDateString();
                 const row = [
                     formattedDate, entry.siteName, entry.siteAddress, entry.trips,
                     entry.distancePerTrip, entry.totalDistanceForDay,
@@ -1184,7 +1182,7 @@
             link.click();
             document.body.removeChild(link);
         }
-
+        
         // ADDED: New function to export all data as a JSON file
         function exportToJson() {
             if (sites.length === 0 && !config.startPoint) {
