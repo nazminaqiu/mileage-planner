@@ -1169,25 +1169,25 @@
                     actionVerbs: ['Sorted out', 'Had a look at', 'Fixed up', 'Ran a check on', 'Tinkered with'],
                     itObjects: ['the main switch', 'a router', 'the office firewall', 'a Wi-Fi point', 'the server rack', 'a user\'s PC', 'the phone system'],
                     purposes: ['to get everyone back online', 'to speed things up a bit', 'because someone logged a ticket', 'to stop any security issues'],
-                    specifics: ['a wonky VLAN setting.', 'a power supply that was giving up.', 'some really old firmware.', 'a simple DNS mix-up.']
+                    specifics: ['a wonky VLAN setting', 'a power supply that was giving up', 'some really old firmware', 'a simple DNS mix-up']
                 },
                 'kaseya': {
                     actionVerbs: ['Pushed the VSA agent to', 'Fixed a broken script on', 'Updated a script for', 'Pulled a report from', 'Ran patches on'],
                     itObjects: ['the servers', 'a bunch of PCs', 'the main controller', 'the important gear', 'the remote tool'],
                     purposes: ['to get all the agents installed', 'to get a maintenance job running automatically', 'for the usual monthly updates', 'to clear a security warning'],
-                    specifics: ['the agent just couldnt log in right.', 'a typo in the script.', 'a new security rule we had to follow.', 'an alert from the monitoring system.']
+                    specifics: ['the agent just couldnt log in right', 'a typo in the script', 'a new security rule we had to follow', 'an alert from the monitoring system']
                 },
                 'network': {
                     actionVerbs: ['Updated the firmware on', 'Swapped out a dead', 'Cleaned up the cabling for', 'Changed the VLANs on', 'Popped in a new'],
                     itObjects: ['the main switch', 'an edge router', 'a Wi-Fi AP', 'a patch panel port', 'a fiber connector', 'the office firewall'],
                     purposes: ['so the network can handle more traffic', 'to stop the connection from dropping', 'to keep guest Wi-Fi separate', 'to link up another office'],
-                    specifics: ['the network was just screaming with traffic.', 'the connection was super slow.', 'to match the new network map.', 'it ran out of IP addresses to give.']
+                    specifics: ['the network was just screaming with traffic', 'the connection was super slow', 'to match the new network map', 'it ran out of IP addresses to give']
                 },
                 'server': {
                     actionVerbs: ['Ran Windows updates on', 'Swapped a bad hard drive in', 'Moved a VM over to', 'Checked the usage on', 'Did a quick security check on'],
                     itObjects: ['the main domain controller', 'the file server', 'the VMware host', 'the database server', 'the physical server box'],
                     purposes: ['for the usual server TLC', 'to make sure no data was lost', 'to spread the load a bit', 'because things were running slow'],
-                    specifics: ['the event logs were full of errors.', 'we got an alert the drive was about to die.', 'to get ready to retire some old kit.', 'the CPU was maxing out.']
+                    specifics: ['the event logs were full of errors', 'we got an alert the drive was about to die', 'to get ready to retire some old kit', 'the CPU was maxing out']
                 }
             };
 
@@ -1209,7 +1209,7 @@
             const purpose = getRandomItem(vocab.purposes);
             const specific = getRandomItem(vocab.specifics);
             
-            return `Popped over to ${siteName} to ${action.toLowerCase()} ${obj}. It was needed ${purpose}, and it turned out the problem was just ${specific.toLowerCase()}`;
+            return `${action} ${obj} at ${siteName}. This was done ${purpose}, and it turned out the problem was just ${specific.toLowerCase()}.`;
         }
 
         function generateAllDescriptions() {
