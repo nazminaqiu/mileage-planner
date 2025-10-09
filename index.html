@@ -988,21 +988,19 @@
             let currentAmount = 0;
             const maxTripsPerDay = 3;
 
-            // Sort all sites by distance
             const allSitesSorted = [...sites].sort((a, b) => b.distance - a.distance);
 
             const dayUsage = new Map();
             days.forEach(day => dayUsage.set(day.getTime(), 0));
-            let dayIndex = 0;
+            let dayCursor = 0; // Tracks the next day to try for allocation
 
-            // --- PASS 1: Give every site one trip (breadth-first) ---
+            // --- PASS 1: Give every site one trip (breadth-first for fairness) ---
             for (const site of allSitesSorted) {
                 if (currentAmount >= target) break;
 
                 let allocated = false;
-                let searchIndex = 0;
-                while (!allocated && searchIndex < days.length) {
-                    const day = days[(dayIndex + searchIndex) % days.length];
+                for (let i = 0; i < days.length; i++) {
+                    const day = days[(dayCursor + i) % days.length];
                     const dayTs = day.getTime();
                     const isLongTrip = site.distance > 100;
                     
@@ -1014,10 +1012,10 @@
                         site.allocation.push({ date: day, trips: 1 });
                         dayUsage.set(dayTs, dayUsage.get(dayTs) + (isLongTrip ? maxTripsPerDay : 1));
                         currentAmount += site.distance * rate;
+                        dayCursor = (dayCursor + i + 1) % days.length; // Move cursor to the next day
                         allocated = true;
-                        dayIndex++;
+                        break; // Move to the next site
                     }
-                    searchIndex++;
                 }
             }
 
@@ -1032,7 +1030,7 @@
                     tripCounter++;
                     
                     const totalTripsForSite = site.allocation.reduce((sum, a) => sum + a.trips, 0);
-                    if ((site.isSingleTrip && totalTripsForSite >= 1) || dayUsage.get(dayTs) >= maxTripsPerDay) {
+                    if ((site.isSingleTrip && totalTripsForSite >= 1) || dayUsage.get(dayTs) >= maxTripsPerDay || site.distance > 100) {
                         continue;
                     }
 
@@ -1163,7 +1161,6 @@
             document.body.removeChild(link);
         }
 
-        // MODIFIED: New fair distribution logic for "Meet Target"
         async function meetTarget() {
             const targetAmount = parseFloat(document.getElementById('targetAmount').value) || 0;
             const rate = parseFloat(document.getElementById('mileageRate').value) || 0;
